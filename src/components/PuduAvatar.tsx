@@ -4,7 +4,7 @@ export type PuduMood = 'idle' | 'speaking' | 'listening' | 'celebrating' | 'thin
 
 interface PuduAvatarProps {
   mood?: PuduMood;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   showSpeechBubble?: boolean;
   bubbleText?: string;
   className?: string;
@@ -17,7 +17,8 @@ export const PuduAvatar: React.FC<PuduAvatarProps> = ({
   bubbleText = '',
   className = '',
 }) => {
-  const sizeClasses = {
+  const sizeClasses: Record<string, string> = {
+    xs: 'w-7 h-7 sm:w-8 sm:h-8',
     sm: 'w-16 h-16',
     md: 'w-24 h-24',
     lg: 'w-32 h-32',
@@ -28,7 +29,7 @@ export const PuduAvatar: React.FC<PuduAvatarProps> = ({
     <div className={`relative inline-flex items-center gap-3 ${className}`}>
       {/* SVG del Pudú Chileno Estilo Duolingo */}
       <div
-        className={`${sizeClasses[size]} relative shrink-0 transition-transform duration-300 ${
+        className={`${sizeClasses[size] || sizeClasses.sm} relative shrink-0 transition-transform duration-300 ${
           mood === 'celebrating'
             ? 'animate-bounce'
             : mood === 'listening'

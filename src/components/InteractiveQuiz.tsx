@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { MineducQuizResult, QuestionItem, DuaSettings } from '../types';
 import { soundFx } from '../utils/soundEffects';
 import { speechReader } from '../utils/speechReader';
+import { unlockLamina } from '../data/albumLaminas';
 import { formatTextWithSyllables } from '../utils/syllables';
 import { randomizeQuizOptions } from '../utils/quizRandomizer';
 import { InteractiveReadingView } from './InteractiveReadingView';
@@ -34,6 +35,7 @@ interface InteractiveQuizProps {
   soundEnabled: boolean;
   settings: DuaSettings;
   onResetQuiz: () => void;
+  onOpenAlbum?: () => void;
 }
 
 type QuizOptionKey = 'A' | 'B' | 'C' | 'D';
@@ -43,6 +45,7 @@ export const InteractiveQuiz: React.FC<InteractiveQuizProps> = ({
   soundEnabled,
   settings,
   onResetQuiz,
+  onOpenAlbum,
 }) => {
   const [activeQuiz, setActiveQuiz] = useState<MineducQuizResult>(() => randomizeQuizOptions(quizData));
   const [currentIdx, setCurrentIdx] = useState<number>(0);
@@ -78,6 +81,9 @@ export const InteractiveQuiz: React.FC<InteractiveQuizProps> = ({
 
   const handleSelectOption = (qId: number, optionKey: QuizOptionKey) => {
     const isCorrect = currentQuestion?.respuesta_correcta === optionKey;
+    if (soundEnabled) {
+      soundFx.playBubble();
+    }
     setUserAnswers((prev) => ({
       ...prev,
       [qId]: optionKey,
@@ -93,13 +99,16 @@ export const InteractiveQuiz: React.FC<InteractiveQuizProps> = ({
 
       // El confeti y celebración SOLO deben lanzarse cuando la respuesta fue correcta
       if (willBeAllAnswered) {
+        unlockLamina('volcan_villarrica');
+        unlockLamina('estrella_dorada');
         if (soundEnabled) {
-          setTimeout(() => soundFx.playCelebration(), 400);
+          setTimeout(() => soundFx.playCelebration(), 300);
+          setTimeout(() => soundFx.playMagicStar(), 700);
         }
         try {
           confetti({
-            particleCount: 75,
-            spread: 70,
+            particleCount: 85,
+            spread: 75,
             origin: { y: 0.6 },
             colors: ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#8b5cf6'],
           });
@@ -513,11 +522,25 @@ export const InteractiveQuiz: React.FC<InteractiveQuizProps> = ({
           </button>
 
           {answeredCount === totalQuestions && (
-            <div className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 hidden sm:flex items-center gap-1.5 shadow-2xs animate-bounce">
-              <Award className="w-4 h-4 text-emerald-600" />
-              <span>
-                ¡Desafío completado con éxito! ({correctCount}/{totalQuestions} estrellas)
-              </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
+                <Award className="w-4 h-4 text-emerald-600" />
+                <span>
+                  ¡Completado! ({correctCount}/{totalQuestions} estrellas ⭐)
+                </span>
+              </div>
+              {onOpenAlbum && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playMagicStar();
+                    onOpenAlbum();
+                  }}
+                  className="text-xs font-black text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-xl border border-amber-300 inline-flex items-center gap-1.5 transition-all shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+                >
+                  <span>📖 Mi Álbum (+Láminas)</span>
+                </button>
+              )}
             </div>
           )}
 

@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
+import { BottomNav } from './components/BottomNav';
+import { SettingsModal } from './components/SettingsModal';
+import { AlbumLaminasModal } from './components/AlbumLaminasModal';
 import { CursosHomeScreen } from './components/CursosHomeScreen';
 import { CourseSubjectsMenu } from './components/CourseSubjectsMenu';
 import { CourseDetailView } from './components/CourseDetailView';
 import { WorksheetPrintView } from './components/WorksheetPrintView';
 import { CurriculumInfoModal } from './components/CurriculumInfoModal';
 import { PuduOralLab } from './components/PuduOralLab';
+import { SoundscapesModal } from './components/SoundscapesModal';
+import {
+  chileanSoundscapes,
+  SoundscapeBiome,
+} from './utils/chileanSoundscapes';
+import { getUnlockedLaminas } from './data/albumLaminas';
 import { getUnitsForNivel, getDefaultQuizForNivelAndUnit } from './data/mineducUnits';
 import { getSampleTextForNivelAndUnit } from './data/mineducTexts';
 import { getHistoriaUnitsForNivel, getDefaultHistoriaQuizForNivelAndUnit } from './data/historiaUnits';
@@ -109,6 +118,33 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showWorksheet, setShowWorksheet] = useState<boolean>(false);
   const [showCurriculumModal, setShowCurriculumModal] = useState<boolean>(false);
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+  const [showAlbumModal, setShowAlbumModal] = useState<boolean>(false);
+  const [unlockedLaminas, setUnlockedLaminas] = useState<string[]>(() => getUnlockedLaminas());
+
+  // Chilean Natural Soundscapes (Ecosistemas DUA) state
+  const [showSoundscapesModal, setShowSoundscapesModal] = useState<boolean>(false);
+  const [soundscapePlaying, setSoundscapePlaying] = useState<boolean>(() => chileanSoundscapes.getIsRunning());
+  const [soundscapeBiome, setSoundscapeBiome] = useState<SoundscapeBiome>(() => chileanSoundscapes.getBiome());
+
+  const handleToggleSoundscape = (biome?: SoundscapeBiome) => {
+    const target = biome || soundscapeBiome;
+    if (soundscapePlaying) {
+      chileanSoundscapes.stop();
+      setSoundscapePlaying(false);
+    } else {
+      chileanSoundscapes.start(target);
+      setSoundscapeBiome(target);
+      setSoundscapePlaying(true);
+    }
+  };
+
+  const handleSelectSoundscapeBiome = (biome: SoundscapeBiome) => {
+    setSoundscapeBiome(biome);
+    if (soundscapePlaying) {
+      chileanSoundscapes.start(biome);
+    }
+  };
 
   // Soporte nativo para el botón Atrás del teléfono móvil y del navegador
   useEffect(() => {
@@ -426,26 +462,26 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col font-sans transition-colors ${
+      className={`min-h-screen flex flex-col font-sans transition-colors w-full overflow-x-hidden ${
         duaSettings.sensoryMode === 'calm'
           ? 'bg-emerald-50/40 text-emerald-950 selection:bg-emerald-200'
           : 'bg-[#fafaf8] text-stone-800 selection:bg-amber-200'
       }`}
     >
-      {/* App Header */}
+      {/* App Header (Clean & Minimalist) */}
       <Header
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled((prev) => !prev)}
-        onOpenCurriculum={() => setShowCurriculumModal(true)}
+        onOpenSettings={() => setShowSettingsModal(true)}
         onGoHome={handleGoHome}
         onOpenOralLab={() => handleOpenOralLab()}
+        onOpenSoundscapes={() => setShowSoundscapesModal(true)}
+        soundscapePlaying={soundscapePlaying}
         currentScreen={currentScreen}
-        fontSize={duaSettings.fontSize}
-        onChangeFontSize={(size) => setDuaSettings((prev) => ({ ...prev, fontSize: size }))}
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-6">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-6 pb-24 sm:pb-8">
         {/* Error notification banner */}
         {error && (
           <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm shadow-xs">
@@ -496,6 +532,17 @@ export default function App() {
         ) : currentScreen === 'oral' ? (
           <PuduOralLab
             initialNivel={selectedNivel}
+            initialSpecies={
+              selectedAsignatura === 'matematica'
+                ? 'pinguino'
+                : selectedAsignatura === 'historia'
+                ? 'condor'
+                : selectedAsignatura === 'ciencias'
+                ? 'puma'
+                : selectedAsignatura === 'ingles'
+                ? 'rana'
+                : 'pudu'
+            }
             soundEnabled={soundEnabled}
             onBackToHome={handleBackToHome}
           />
@@ -525,6 +572,9 @@ export default function App() {
             onOpenWorksheet={() => setShowWorksheet(true)}
             selectedAsignatura={selectedAsignatura}
             onSelectAsignatura={handleSelectAsignatura}
+            onOpenOralLab={() => handleOpenOralLab(selectedNivel)}
+            onOpenSoundscapes={() => setShowSoundscapesModal(true)}
+            soundscapePlaying={soundscapePlaying}
           />
         )}
       </main>
@@ -532,7 +582,7 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-stone-200 bg-white/70 py-4 text-center text-xs text-stone-600">
         <p>
-          Profesor Experto en Currículum Nacional Mineduc de Chile • Lenguaje, Historia y Matemática (1° a 4° Básico) • DUA / PIE
+          Profesor Experto en Currículum Nacional Mineduc de Chile • Lenguaje, Matemática, Historia, Ciencias e Inglés (1° a 4° Básico) • DUA / PIE
         </p>
       </footer>
 
@@ -550,6 +600,48 @@ export default function App() {
       {showCurriculumModal && (
         <CurriculumInfoModal onClose={() => setShowCurriculumModal(false)} />
       )}
+
+      {/* Centralized Settings & Accessibility Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled((prev) => !prev)}
+        duaSettings={duaSettings}
+        onChangeDuaSettings={setDuaSettings}
+        onOpenCurriculum={() => setShowCurriculumModal(true)}
+        onOpenSoundscapes={() => setShowSoundscapesModal(true)}
+        soundscapePlaying={soundscapePlaying}
+      />
+
+      {/* Chilean Natural Soundscapes Modal (Ecosistemas DUA) */}
+      <SoundscapesModal
+        isOpen={showSoundscapesModal}
+        onClose={() => setShowSoundscapesModal(false)}
+        activeBiome={soundscapeBiome}
+        isPlaying={soundscapePlaying}
+        onTogglePlay={handleToggleSoundscape}
+        onSelectBiome={handleSelectSoundscapeBiome}
+      />
+
+      {/* Collectible Fauna Album Modal */}
+      <AlbumLaminasModal
+        isOpen={showAlbumModal}
+        onClose={() => setShowAlbumModal(false)}
+        unlockedIds={unlockedLaminas}
+      />
+
+      {/* Mobile Bottom Navigation Bar (Persistent and Touch-Friendly) */}
+      <BottomNav
+        currentScreen={currentScreen}
+        onGoHome={handleGoHome}
+        onOpenOralLab={() => handleOpenOralLab()}
+        onOpenAlbum={() => {
+          setUnlockedLaminas(getUnlockedLaminas());
+          setShowAlbumModal(true);
+        }}
+        onOpenSettings={() => setShowSettingsModal(true)}
+      />
     </div>
   );
 }

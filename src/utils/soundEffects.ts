@@ -101,14 +101,105 @@ class SoundFx {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(440, now);
-      osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
-      gain.gain.setValueAtTime(0.1, now);
+      osc.frequency.setValueAtTime(480, now);
+      osc.frequency.exponentialRampToValueAtTime(1100, now + 0.07);
+      gain.gain.setValueAtTime(0.14, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(now);
-      osc.stop(now + 0.09);
+      osc.stop(now + 0.085);
+    } catch {
+      // Ignored
+    }
+  }
+
+  playBubble() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(650, now);
+      osc.frequency.exponentialRampToValueAtTime(1300, now + 0.06);
+      gain.gain.setValueAtTime(0.16, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.075);
+    } catch {
+      // Ignored
+    }
+  }
+
+  playBoing() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(580, now + 0.12);
+      osc.frequency.exponentialRampToValueAtTime(320, now + 0.22);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.26);
+    } catch {
+      // Ignored
+    }
+  }
+
+  playMagicStar() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      // Glockenspiel sparkle chord: C6, E6, G6, B6, C7
+      const notes = [1046.5, 1318.5, 1567.98, 1975.5, 2093.0];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+        gain.gain.setValueAtTime(0.12, now + idx * 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.06);
+        osc.stop(now + idx * 0.06 + 0.38);
+      });
+    } catch {
+      // Ignored
+    }
+  }
+
+  playAnimalCheer() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      // Cheerful whistle / chirp
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.linearRampToValueAtTime(780, now + 0.08);
+      osc.frequency.linearRampToValueAtTime(650, now + 0.15);
+      osc.frequency.linearRampToValueAtTime(980, now + 0.24);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.29);
     } catch {
       // Ignored
     }

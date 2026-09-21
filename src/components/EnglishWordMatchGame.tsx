@@ -3,17 +3,21 @@ import { Volume2, CheckCircle2, RotateCcw, Sparkles, Star, Heart, ArrowRight } f
 import { WordMatchPair, getVocabularyPairsForUnit } from '../data/inglesVocabulary';
 import { speechReader } from '../utils/speechReader';
 import { soundFx } from '../utils/soundEffects';
+import { unlockLamina } from '../data/albumLaminas';
 import confetti from 'canvas-confetti';
 
 interface EnglishWordMatchGameProps {
   nivel: string;
   unidadNombre: string;
   onFinishRound?: () => void;
+  onOpenAlbum?: () => void;
 }
 
 export const EnglishWordMatchGame: React.FC<EnglishWordMatchGameProps> = ({
   nivel,
   unidadNombre,
+  onFinishRound,
+  onOpenAlbum,
 }) => {
   const [pairs, setPairs] = useState<WordMatchPair[]>([]);
   const [shuffledSpanish, setShuffledSpanish] = useState<WordMatchPair[]>([]);
@@ -48,6 +52,7 @@ export const EnglishWordMatchGame: React.FC<EnglishWordMatchGameProps> = ({
   const handleSelectEnglish = (pair: WordMatchPair) => {
     if (matchedIds.includes(pair.id)) return;
 
+    soundFx.playBubble();
     setSelectedEnId(pair.id);
     setWrongMatch(null);
 
@@ -64,7 +69,7 @@ export const EnglishWordMatchGame: React.FC<EnglishWordMatchGameProps> = ({
     if (matchedIds.includes(pair.id)) return;
 
     if (!selectedEnId) {
-      // Si no ha seleccionado en inglés, le avisamos suavemente
+      soundFx.playBubble();
       return;
     }
 
@@ -81,10 +86,14 @@ export const EnglishWordMatchGame: React.FC<EnglishWordMatchGameProps> = ({
       if (nextMatched.length === pairs.length && pairs.length > 0) {
         setIsCompleted(true);
         soundFx.playCelebration();
+        setTimeout(() => soundFx.playMagicStar(), 400);
+        unlockLamina('rana_darwin');
+        unlockLamina('oceano_pacifico');
+        if (onFinishRound) onFinishRound();
         try {
           confetti({
-            particleCount: 70,
-            spread: 60,
+            particleCount: 80,
+            spread: 70,
             origin: { y: 0.6 },
           });
         } catch {}
@@ -146,14 +155,35 @@ export const EnglishWordMatchGame: React.FC<EnglishWordMatchGameProps> = ({
 
       {/* Pantalla de Victoria / Completado */}
       {isCompleted ? (
-        <div className="py-8 px-4 text-center bg-gradient-to-b from-amber-50 to-emerald-50 rounded-3xl border border-emerald-200">
+        <div className="py-8 px-4 text-center bg-gradient-to-b from-amber-50 to-emerald-50 rounded-3xl border border-emerald-200 animate-fadeIn">
           <div className="text-5xl mb-3 animate-bounce">🐸🎉</div>
           <h4 className="text-xl sm:text-2xl font-black text-emerald-900 mb-1">
             ¡Felicitaciones! ¡Lo lograste!
           </h4>
-          <p className="text-sm text-stone-600 max-w-md mx-auto mb-6">
+          <p className="text-sm text-stone-600 max-w-md mx-auto mb-4">
             La Ranita de Darwin está muy orgullosa. Uniste todas las palabras de esta unidad con tu dedito.
           </p>
+
+          {/* Recompensa de lámina desbloqueada */}
+          <div className="max-w-xs mx-auto mb-6 p-3 rounded-2xl bg-white border-2 border-amber-300 shadow-xs flex items-center gap-3">
+            <span className="text-3xl select-none">🐸</span>
+            <div className="text-left">
+              <span className="text-[10px] font-black uppercase text-amber-600 block">¡Nueva Lámina Desbloqueada!</span>
+              <span className="text-xs font-black text-stone-900">Ranita de Darwin dorada</span>
+            </div>
+            {onOpenAlbum && (
+              <button
+                type="button"
+                onClick={() => {
+                  soundFx.playMagicStar();
+                  onOpenAlbum();
+                }}
+                className="ml-auto px-2.5 py-1 rounded-xl bg-amber-500 text-white font-black text-[11px] shadow-2xs hover:bg-amber-600 cursor-pointer"
+              >
+                Ver Álbum
+              </button>
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button

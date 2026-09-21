@@ -1,6 +1,6 @@
 {
   "name": "Generador Mineduc de Comprensión Lectora",
-  "description": "Generador pedagógico inclusivo alineado al Currículum Mineduc de Lenguaje, Matemática, Historia, Ciencias Naturales e Inglés (1° a 4° Básico) con guías de fauna nativa chilena, unidades oficiales, DUA, lectura en voz alta y actividades interactivas.",
+  "description": "Generador pedagógico inclusivo alineado al Currículum Mineduc de Lenguaje, Matemática, Historia, Ciencias Naturales e Inglés (1° a 4° Básico) con paisajes sonoros de ecosistemas chilenos, guías de fauna nativa, unidades oficiales, DUA, lectura en voz alta y actividades interactivas.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

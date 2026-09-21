@@ -1,70 +1,66 @@
 import React from 'react';
-import { BookOpen, Volume2, VolumeX, Award, Type, Mic, Home } from 'lucide-react';
+import { Volume2, VolumeX, Settings, Home, Mic } from 'lucide-react';
 import { PuduAvatar } from './PuduAvatar';
 
 interface HeaderProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
-  onOpenCurriculum: () => void;
+  onOpenSettings: () => void;
   onGoHome?: () => void;
   onOpenOralLab?: () => void;
+  onOpenSoundscapes?: () => void;
+  soundscapePlaying?: boolean;
   currentScreen?: 'home' | 'subjects' | 'course' | 'oral';
-  fontSize?: 'normal' | 'grande' | 'gigante';
-  onChangeFontSize?: (size: 'normal' | 'grande' | 'gigante') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   soundEnabled,
   onToggleSound,
-  onOpenCurriculum,
+  onOpenSettings,
   onGoHome,
   onOpenOralLab,
+  onOpenSoundscapes,
+  soundscapePlaying = false,
   currentScreen = 'home',
-  fontSize = 'normal',
-  onChangeFontSize,
 }) => {
   return (
-    <header className="border-b border-stone-200/80 bg-white/95 backdrop-blur-md sticky top-0 z-30 shadow-2xs">
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
-        {/* Brand identity - Friendly & Clean */}
+    <header className="border-b border-stone-200/80 bg-white/95 backdrop-blur-md sticky top-0 z-30 shadow-2xs w-full">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 w-full">
+        {/* Brand identity - Minimalist & Never overflowing */}
         <div
           onClick={onGoHome}
-          className={`flex items-center gap-2.5 ${onGoHome ? 'cursor-pointer select-none group' : ''}`}
-          title={onGoHome ? 'Ir al inicio de cursos' : undefined}
+          className={`flex items-center gap-2 shrink-0 select-none ${
+            onGoHome ? 'cursor-pointer group' : ''
+          }`}
+          title="Ir al inicio de cursos"
         >
-          <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-300/60 flex items-center justify-center p-1 group-hover:scale-105 transition-transform shrink-0">
-            <PuduAvatar mood="happy" size="sm" showSpeechBubble={false} />
+          <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-300/60 flex items-center justify-center p-0.5 group-hover:scale-105 transition-transform shrink-0 overflow-hidden">
+            <PuduAvatar mood="happy" size="xs" showSpeechBubble={false} />
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-base sm:text-lg font-black text-stone-900 tracking-tight group-hover:text-amber-700 transition-colors">
-                Pudú Mineduc
-              </span>
-              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                1° a 4° Básico
-              </span>
-            </div>
-            <p className="text-[11px] text-stone-500 font-medium hidden sm:block">
-              Aprender jugando • Currículum Nacional Chile
-            </p>
+            <span className="text-sm sm:text-base font-black text-stone-900 tracking-tight group-hover:text-amber-700 transition-colors">
+              Pudú Mineduc
+            </span>
+            <span className="text-[9px] font-black uppercase ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 hidden md:inline-block">
+              1° a 4° Básico
+            </span>
           </div>
         </div>
 
-        {/* Center Mode Switcher Pills (Kid-Friendly App Navigation) */}
-        <nav className="flex items-center gap-1 bg-stone-100 p-1 rounded-2xl border border-stone-200/80">
+        {/* Center navigation pills (Visible on tablet & desktop, hidden on mobile in favor of bottom nav) */}
+        <nav className="hidden sm:flex items-center gap-1 bg-stone-100 p-1 rounded-2xl border border-stone-200/80 shrink-0">
           <button
             type="button"
             id="nav-btn-courses"
             onClick={onGoHome}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
-              currentScreen === 'home'
-                ? 'bg-white text-stone-900 shadow-xs'
-                : 'text-stone-700 hover:text-stone-900 hover:bg-stone-200/80'
+              currentScreen === 'home' || currentScreen === 'subjects' || currentScreen === 'course'
+                ? 'bg-white text-stone-900 shadow-2xs'
+                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
             }`}
-            title="Volver a la pantalla principal de cursos"
           >
-            <Home className="w-3.5 h-3.5 text-amber-600" />
-            <span>Inicio</span>
+            <Home className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span>Cursos</span>
           </button>
 
           {onOpenOralLab && (
@@ -74,47 +70,48 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onOpenOralLab}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
                 currentScreen === 'oral'
-                  ? 'bg-emerald-600 text-white shadow-xs'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
                   : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
               }`}
-              title="Taller de Expresión Oral y Lectura con Pudú"
             >
-              <Mic className={`w-3.5 h-3.5 ${currentScreen === 'oral' ? 'text-white' : 'text-emerald-600'}`} />
-              <span className="hidden xs:inline">Taller Oral</span>
-              <span className="xs:hidden">Voz</span>
+              <Mic className={`w-3.5 h-3.5 shrink-0 ${currentScreen === 'oral' ? 'text-white' : 'text-emerald-600'}`} />
+              <span>Taller de Voz</span>
             </button>
           )}
         </nav>
 
-        {/* Right utility cluster: Clean discrete controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Font Size DUA Toggle (Minimalist 2-state or 3-state) */}
-          {onChangeFontSize && (
-            <div className="flex items-center bg-stone-100 rounded-xl p-0.5 border border-stone-200/80 text-xs">
-              <button
-                type="button"
-                id="btn-font-toggle"
-                onClick={() => {
-                  const next = fontSize === 'normal' ? 'grande' : fontSize === 'grande' ? 'gigante' : 'normal';
-                  onChangeFontSize(next);
-                }}
-                className="px-2 py-1 rounded-lg text-xs font-bold text-stone-700 hover:text-stone-900 cursor-pointer inline-flex items-center gap-1"
-                title="Cambiar tamaño de letra (Accesibilidad DUA)"
-              >
-                <Type className="w-3.5 h-3.5 text-stone-500" />
-                <span className="font-mono text-[11px] font-black">
-                  {fontSize === 'normal' ? '1x' : fontSize === 'grande' ? '1.5x' : '2x'}
-                </span>
-              </button>
-            </div>
+        {/* Right utility cluster: Soundscapes, Sound Toggle & Settings */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Paisajes Sonoros de Chile (Ambientes Naturales DUA) */}
+          {onOpenSoundscapes && (
+            <button
+              type="button"
+              id="btn-open-soundscapes"
+              onClick={onOpenSoundscapes}
+              className={`h-8 sm:h-9 px-2 sm:px-2.5 rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0 text-xs font-bold ${
+                soundscapePlaying
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 ring-2 ring-emerald-200'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-600 border-stone-200'
+              }`}
+              title="Paisajes Sonoros de Chile (Ambientes de concentración)"
+              aria-label="Abrir paisajes sonoros"
+            >
+              <span className="text-sm select-none">🍃</span>
+              <span className="hidden md:inline">
+                {soundscapePlaying ? 'Ambiente Activo' : 'Paisaje Sonoro'}
+              </span>
+              {soundscapePlaying && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              )}
+            </button>
           )}
 
-          {/* Sound Toggle */}
+          {/* Sound Toggle (Parlante) */}
           <button
             type="button"
             id="btn-toggle-sound"
             onClick={onToggleSound}
-            className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0 ${
               soundEnabled
                 ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                 : 'bg-stone-100 text-stone-400 border-stone-200 hover:bg-stone-200'
@@ -129,16 +126,16 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* Teacher/Parent OAs Curriculum Modal */}
+          {/* Settings & Accessibility Hub */}
           <button
             type="button"
-            id="btn-curriculum-guide"
-            onClick={onOpenCurriculum}
-            className="p-2 rounded-xl text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 border border-stone-200 transition-colors cursor-pointer"
-            title="Ver matriz curricular oficial Mineduc (OAs)"
-            aria-label="Ver matriz curricular oficial Mineduc"
+            id="btn-open-settings"
+            onClick={onOpenSettings}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 border border-stone-200 flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs shrink-0"
+            title="Ajustes de accesibilidad (letra, sonido, currículum)"
+            aria-label="Abrir ajustes"
           >
-            <Award className="w-4 h-4 text-amber-600" />
+            <Settings className="w-4 h-4 text-stone-600" />
           </button>
         </div>
       </div>

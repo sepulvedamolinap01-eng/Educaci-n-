@@ -19,6 +19,11 @@ import { MineducQuizResult, SampleMineducText, DuaSettings, AsignaturaType } fro
 import { InteractiveQuiz } from './InteractiveQuiz';
 import { JsonExportView } from './JsonExportView';
 import { EnglishWordMatchGame } from './EnglishWordMatchGame';
+import { InteractiveFaunaCompanion } from './InteractiveFaunaCompanion';
+import { AlbumLaminasModal } from './AlbumLaminasModal';
+import { DocentePanelModal } from './DocentePanelModal';
+import { getUnlockedLaminas } from '../data/albumLaminas';
+import { soundFx } from '../utils/soundEffects';
 import { getBilingualLinesForText } from '../data/inglesTranslations';
 import { formatTextWithSyllables } from '../utils/syllables';
 import { speechReader } from '../utils/speechReader';
@@ -43,6 +48,8 @@ import {
   Home,
   FlaskConical,
   Languages,
+  Star,
+  Award,
 } from 'lucide-react';
 
 interface CourseDetailViewProps {
@@ -67,6 +74,9 @@ interface CourseDetailViewProps {
   onOpenWorksheet: () => void;
   selectedAsignatura: AsignaturaType;
   onSelectAsignatura: (asignatura: AsignaturaType) => void;
+  onOpenOralLab?: () => void;
+  onOpenSoundscapes?: () => void;
+  soundscapePlaying?: boolean;
 }
 
 const ALL_COURSES = ['1° Básico', '2° Básico', '3° Básico', '4° Básico'];
@@ -92,6 +102,9 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
   onGenerateQuestions,
   onOpenWorksheet,
   selectedAsignatura,
+  onOpenOralLab,
+  onOpenSoundscapes,
+  soundscapePlaying = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'quiz' | 'json'>('quiz');
   const [showTextEditor, setShowTextEditor] = useState<boolean>(false);
@@ -104,6 +117,15 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
   const [showTechnicalCurriculum, setShowTechnicalCurriculum] = useState<boolean>(false);
   const [rulerTop, setRulerTop] = useState<number>(0);
   const [isRulerVisible, setIsRulerVisible] = useState<boolean>(false);
+  const [showAlbumModal, setShowAlbumModal] = useState<boolean>(false);
+  const [showDocenteModal, setShowDocenteModal] = useState<boolean>(false);
+  const [unlockedLaminas, setUnlockedLaminas] = useState<string[]>(() => getUnlockedLaminas());
+
+  const handleOpenAlbum = () => {
+    soundFx.playMagicStar();
+    setUnlockedLaminas(getUnlockedLaminas());
+    setShowAlbumModal(true);
+  };
 
   const isGrade1or2 = selectedNivel === '1° Básico' || selectedNivel === '2° Básico';
   const isEarlyLearningMode =
@@ -508,41 +530,20 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
             </div>
           </div>
 
-          {/* Child-Friendly Tactile Toolbar */}
+          {/* Clean, Focused Action Toolbar */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Early Learning Mode Toggle (1° y 2° Básico) */}
-            <button
-              type="button"
-              id="btn-toggle-early-learning"
-              onClick={() => {
-                onChangeDuaSettings((prev) => ({
-                  ...prev,
-                  earlyLearningMode: !isEarlyLearningMode,
-                }));
-              }}
-              className={`px-3 py-2 rounded-2xl text-xs font-black inline-flex items-center gap-1.5 transition-all cursor-pointer border ${
-                isEarlyLearningMode
-                  ? 'bg-amber-100 text-amber-950 border-amber-400 ring-2 ring-amber-300 shadow-2xs'
-                  : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
-              }`}
-              title={
-                isEarlyLearningMode
-                  ? 'Modo Aprendizaje Temprano ACTIVO (clic para desactivar)'
-                  : 'Activar Modo Aprendizaje Temprano (para 1° y 2° básico)'
-              }
-            >
-              <span>🧸 Modo Temprano</span>
-              {isEarlyLearningMode && <Check className="w-3 h-3 text-amber-800" />}
-            </button>
-            {/* Play/Stop Audio Button */}
+            {/* Primary Play/Stop Audio Button */}
             <button
               type="button"
               id="btn-voice-reading-toggle"
-              onClick={handleTogglePlayReading}
-              className={`px-4 py-2 rounded-2xl text-xs font-black inline-flex items-center gap-2 transition-all cursor-pointer shadow-2xs ${
+              onClick={() => {
+                soundFx.playPop();
+                handleTogglePlayReading();
+              }}
+              className={`px-4 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-95 ${
                 isSpeakingReading
                   ? 'bg-red-600 text-white ring-2 ring-red-300 animate-pulse'
-                  : `${theme.primary} text-white`
+                  : `${theme.primary} text-white hover:opacity-90`
               }`}
               title={isSpeakingReading ? 'Detener lectura' : 'Escuchar la lectura en voz alta'}
             >
@@ -559,274 +560,114 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
               )}
             </button>
 
+            {/* Collectible Album Button */}
+            <button
+              type="button"
+              id="btn-open-album-toolbar"
+              onClick={handleOpenAlbum}
+              className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border border-amber-200"
+              title="Abrir mi Álbum de Láminas"
+            >
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-600" />
+              <span>Álbum ({unlockedLaminas.length}/12)</span>
+            </button>
+
             {/* Calculadora Escolar button - exclusive to Matemática 1° a 4° Básico */}
             {isMatematica && (
               <button
                 type="button"
                 id="btn-open-calculadora-toolbar"
-                onClick={() => setShowCalculadora(true)}
-                className="px-3.5 py-2 rounded-2xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border border-emerald-500"
+                onClick={() => {
+                  soundFx.playBoing();
+                  setShowCalculadora(true);
+                }}
+                className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-900 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border border-emerald-200"
                 title="Abrir Calculadora Escolar Explicada (1° a 4° Básico)"
               >
                 <span>🧮 Calculadora</span>
-                <span className="hidden sm:inline">Explicada</span>
               </button>
             )}
 
-            {/* Bilingual Controls for English (Minimalist) */}
+            {/* Bilingual Controls for English */}
             {isIngles && (
-              <>
-                <button
-                  type="button"
-                  id="btn-toggle-english-translation"
-                  onClick={() => setShowEnglishTranslation((prev) => !prev)}
-                  className={`px-3 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border ${
-                    showEnglishTranslation
-                      ? 'bg-indigo-50 text-indigo-900 border-indigo-300 ring-1 ring-indigo-200'
-                      : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
-                  }`}
-                  title="Mostrar u ocultar la traducción en español de cada frase"
-                >
-                  <span>🇨🇱 Traducción</span>
-                  {showEnglishTranslation && <Check className="w-3 h-3 text-indigo-700" />}
-                </button>
-
-                {showEnglishTranslation && (
-                  <button
-                    type="button"
-                    id="btn-toggle-english-order"
-                    onClick={() =>
-                      setEnglishLangOrder((prev) => (prev === 'en-first' ? 'es-first' : 'en-first'))
-                    }
-                    className="px-3 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100"
-                    title="Alternar si va primero el inglés o el español"
-                  >
-                    <span>{englishLangOrder === 'en-first' ? '🇬🇧 Inglés arriba' : '🇨🇱 Español arriba'}</span>
-                  </button>
-                )}
-              </>
+              <button
+                type="button"
+                id="btn-toggle-english-translation"
+                onClick={() => {
+                  soundFx.playBubble();
+                  setShowEnglishTranslation((prev) => !prev);
+                }}
+                className={`px-3 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border active:scale-95 ${
+                  showEnglishTranslation
+                    ? 'bg-indigo-50 text-indigo-900 border-indigo-300 ring-1 ring-indigo-200'
+                    : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
+                }`}
+                title="Mostrar u ocultar la traducción en español"
+              >
+                <span>🇨🇱 Traducción</span>
+                {showEnglishTranslation && <Check className="w-3 h-3 text-indigo-700" />}
+              </button>
             )}
 
-            {/* Syllables Mode */}
-            <button
-              type="button"
-              id="btn-toggle-syllables-reading"
-              onClick={handleToggleSyllables}
-              className={`px-3 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border ${
-                duaSettings.syllableMode
-                  ? 'bg-amber-100 text-amber-950 border-amber-400 ring-1 ring-amber-300'
-                  : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-              }`}
-              title="Separar sílabas para facilitar la lectura"
-            >
-              <span>Sílabas</span>
-              {duaSettings.syllableMode && <Check className="w-3 h-3 text-amber-800" />}
-            </button>
+            {/* Taller de Voz del Animal Guía */}
+            {onOpenOralLab && (
+              <button
+                type="button"
+                id="btn-open-voice-lab-subject"
+                onClick={() => {
+                  soundFx.playPop();
+                  onOpenOralLab();
+                }}
+                className="px-3 py-2 rounded-2xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                title="Practicar pronunciación, números o lectura con el animal guía"
+              >
+                <span>🎙️ Taller de Voz</span>
+              </button>
+            )}
 
-            {/* Reading Focus Ruler */}
-            <button
-              type="button"
-              id="btn-toggle-reading-ruler-reading"
-              onClick={handleToggleReadingRuler}
-              className={`px-3 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border ${
-                duaSettings.readingRuler
-                  ? 'bg-indigo-50 text-indigo-900 border-indigo-300 ring-1 ring-indigo-200'
-                  : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-              }`}
-              title="Regla para seguir la línea de lectura con la vista"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Regla</span>
-              {duaSettings.readingRuler && <Check className="w-3 h-3 text-indigo-700" />}
-            </button>
+            {/* Paisajes Sonoros Ambientales de Chile */}
+            {onOpenSoundscapes && (
+              <button
+                type="button"
+                id="btn-open-soundscapes-subject"
+                onClick={() => {
+                  soundFx.playPop();
+                  onOpenSoundscapes();
+                }}
+                className={`px-3 py-2 rounded-2xl text-xs font-bold border shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                  soundscapePlaying
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300 ring-1 ring-emerald-200'
+                    : 'bg-emerald-50/60 hover:bg-emerald-100/80 text-emerald-900 border-emerald-200'
+                }`}
+                title="Ambiente natural relajante para leer y concentrarse"
+              >
+                <span>🍃</span>
+                <span>{soundscapePlaying ? 'Ambiente Activo 🔊' : 'Paisaje Sonoro'}</span>
+              </button>
+            )}
 
-            {/* DUA Speed & Sensory Settings Modal */}
+            {/* Teacher and Settings Hub button */}
             <button
               type="button"
-              id="btn-open-dua-settings-modal"
-              onClick={() => setShowDuaModal((prev) => !prev)}
-              className={`p-2 rounded-2xl border transition-colors cursor-pointer ${
-                showDuaModal
-                  ? 'bg-stone-200 border-stone-300 text-stone-900'
-                  : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
-              }`}
-              title="Ajustes de accesibilidad (velocidad de voz y modo calma)"
+              id="btn-open-docente-panel"
+              onClick={() => {
+                soundFx.playPop();
+                setShowDocenteModal(true);
+              }}
+              className="px-3 py-2 rounded-2xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              title="Ajustes DUA, editor de texto y currículum"
             >
-              <Sliders className="w-4 h-4" />
-            </button>
-
-            {/* Edit Text Button (For Teachers / Parents) */}
-            <button
-              type="button"
-              onClick={() => setShowTextEditor((prev) => !prev)}
-              className="p-2 rounded-2xl border border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
-              title="Editar o cargar texto personalizado"
-            >
-              <Edit3 className="w-4 h-4" />
-            </button>
-
-            {/* Generate with AI Button */}
-            <button
-              type="button"
-              id="btn-generate-ai-course-view"
-              onClick={onGenerateQuestions}
-              disabled={isLoading}
-              className={`px-3.5 py-2 rounded-2xl text-xs font-bold text-white transition-all cursor-pointer shadow-2xs inline-flex items-center gap-1.5 ${
-                isLoading ? 'bg-stone-400 cursor-not-allowed' : `${theme.primary}`
-              }`}
-              title="Generar nueva propuesta pedagógica con IA"
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isLoading ? 'Calibrando...' : 'Nueva IA'}</span>
+              <span>💼 Herramientas</span>
             </button>
           </div>
         </div>
 
-        {/* Small DUA popover */}
-        {showDuaModal && (
-          <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 text-xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-200">
-              <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-stone-600" />
-                Ajustes de Accesibilidad DUA
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowDuaModal(false)}
-                className="text-stone-400 hover:text-stone-700 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold text-stone-600 block mb-1">
-                  Velocidad de Lectura:
-                </label>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onChangeDuaSettings((prev) => ({ ...prev, speechSpeed: 'slow' }))}
-                    className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      duaSettings.speechSpeed === 'slow'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-white border border-stone-200 text-stone-700'
-                    }`}
-                  >
-                    Pausada (1°/2°)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onChangeDuaSettings((prev) => ({ ...prev, speechSpeed: 'normal' }))}
-                    className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      duaSettings.speechSpeed === 'normal'
-                        ? 'bg-amber-600 text-white'
-                        : 'bg-white border border-stone-200 text-stone-700'
-                    }`}
-                  >
-                    Normal (3°/4°)
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-stone-600 block mb-1">
-                  Modo Sensorial:
-                </label>
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onChangeDuaSettings((prev) => ({ ...prev, sensoryMode: 'standard' }))}
-                    className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      duaSettings.sensoryMode === 'standard'
-                        ? 'bg-stone-800 text-white'
-                        : 'bg-white border border-stone-200 text-stone-700'
-                    }`}
-                  >
-                    Estándar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onChangeDuaSettings((prev) => ({ ...prev, sensoryMode: 'calm' }))}
-                    className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      duaSettings.sensoryMode === 'calm'
-                        ? 'bg-emerald-700 text-white'
-                        : 'bg-white border border-stone-200 text-stone-700'
-                    }`}
-                  >
-                    Modo Calma Verde
-                  </button>
-                </div>
-              </div>
-
-              <div className="sm:col-span-2 pt-2 border-t border-stone-200">
-                <label className="text-[11px] font-bold text-stone-600 block mb-1">
-                  Modo de Aprendizaje Temprano (1° y 2° Básico):
-                </label>
-                <div className="flex items-center justify-between gap-2 p-2 bg-white rounded-xl border border-stone-200">
-                  <span className="text-[11px] text-stone-600">
-                    Reduce carga de texto, prioriza íconos/juegos táctiles y desactiva gramática técnica.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onChangeDuaSettings((prev) => ({
-                        ...prev,
-                        earlyLearningMode: !isEarlyLearningMode,
-                      }))
-                    }
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      isEarlyLearningMode
-                        ? 'bg-amber-500 text-white'
-                        : 'bg-stone-200 text-stone-700'
-                    }`}
-                  >
-                    {isEarlyLearningMode ? 'Activado' : 'Desactivado'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Early Learning Mode Reassurance Banner (1° y 2° Básico) */}
-        {isEarlyLearningMode && (
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-100/90 via-orange-50/80 to-amber-100/90 border border-amber-300/80 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs animate-fadeIn">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-200/90 text-amber-800 flex items-center justify-center text-xl shadow-2xs shrink-0">
-                ✨
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs sm:text-sm font-black text-amber-950">
-                    Modo de Aprendizaje Temprano Activo ({selectedNivel})
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
-                    Primeros Pasos
-                  </span>
-                </div>
-                <p className="text-[11px] sm:text-xs text-amber-900/90 mt-0.5">
-                  {isIngles
-                    ? 'Actividad visual con palabras e íconos para unir con el dedito. Sin sobrecarga de texto ni jerga gramatical.'
-                    : 'Texto reducido y espacioso, íconos visuales de apoyo, audio por frase y sin explicaciones gramaticales complejas.'}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                onChangeDuaSettings((prev) => ({
-                  ...prev,
-                  earlyLearningMode: false,
-                }));
-              }}
-              className="px-3 py-1.5 rounded-xl text-[11px] font-bold text-amber-900 bg-white/90 hover:bg-white border border-amber-300 transition-all cursor-pointer self-start sm:self-center shrink-0 shadow-2xs"
-            >
-              Cambiar a modo estándar
-            </button>
-          </div>
-        )}
+        {/* Mascota Interactiva y Guía de Fauna Chilena */}
+        <InteractiveFaunaCompanion
+          species={guideSpecies}
+          subjectName={currentUnitDef.nombre}
+          onOpenAlbum={handleOpenAlbum}
+        />
 
         {/* Text Area (Editing vs Book-like Reading View) */}
         {showTextEditor ? (
@@ -930,6 +771,7 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
                   <EnglishWordMatchGame
                     nivel={selectedNivel}
                     unidadNombre={currentUnitDef.nombre}
+                    onOpenAlbum={handleOpenAlbum}
                   />
                 ) : (
                   <div className={`${textSizeClass} space-y-4`}>
@@ -1137,6 +979,7 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
             soundEnabled={soundEnabled}
             settings={{ ...duaSettings, earlyLearningMode: isEarlyLearningMode }}
             onResetQuiz={() => {}}
+            onOpenAlbum={handleOpenAlbum}
           />
         ) : (
           <JsonExportView
@@ -1161,6 +1004,30 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
         onClose={() => setShowFaunaModal(false)}
         soundEnabled={soundEnabled}
         initialSpecies={guideSpecies}
+      />
+
+      {/* Modal Álbum de Láminas Coleccionables del Explorador */}
+      <AlbumLaminasModal
+        isOpen={showAlbumModal}
+        onClose={() => setShowAlbumModal(false)}
+        unlockedIds={unlockedLaminas}
+      />
+
+      {/* Modal Rincón Docente y Ajustes */}
+      <DocentePanelModal
+        isOpen={showDocenteModal}
+        onClose={() => setShowDocenteModal(false)}
+        selectedNivel={selectedNivel}
+        selectedUnidad={selectedUnidad}
+        selectedObjetivo={selectedObjetivo}
+        inputText={inputText}
+        onChangeInputText={onChangeInputText}
+        duaSettings={duaSettings}
+        onChangeDuaSettings={onChangeDuaSettings}
+        onGenerateQuestions={onGenerateQuestions}
+        isLoading={isLoading}
+        onOpenWorksheet={onOpenWorksheet}
+        onViewJson={() => setActiveTab('json')}
       />
     </div>
   );
