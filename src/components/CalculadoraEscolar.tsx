@@ -14,6 +14,7 @@ import {
 import { speechReader } from '../utils/speechReader';
 import { soundFx } from '../utils/soundEffects';
 import { FaunaAvatar } from './FaunaAvatars';
+import { MatematicaConcretaWidget } from './MatematicaConcretaWidget';
 
 interface CalculadoraEscolarProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export const CalculadoraEscolar: React.FC<CalculadoraEscolarProps> = ({
   soundEnabled,
   selectedNivel = '1° Básico',
 }) => {
+  const [activeTab, setActiveTab] = useState<'calculadora' | 'concreto'>('calculadora');
   const [display, setDisplay] = useState<string>('0');
   const [prevValue, setPrevValue] = useState<number | null>(null);
   const [operator, setOperator] = useState<'+' | '-' | '×' | '÷' | null>(null);
@@ -304,7 +306,44 @@ export const CalculadoraEscolar: React.FC<CalculadoraEscolarProps> = ({
           </button>
         </div>
 
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
+        {/* Mode Selector Tabs */}
+        <div className="flex items-center gap-1.5 p-2 bg-emerald-50 border-b border-emerald-100">
+          <button
+            type="button"
+            onClick={() => {
+              playClick();
+              setActiveTab('calculadora');
+            }}
+            className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeTab === 'calculadora'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white/80 hover:bg-white text-emerald-950 border border-emerald-200'
+            }`}
+          >
+            <span>🧮 Calculadora Explicada</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              playClick();
+              setActiveTab('concreto');
+            }}
+            className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeTab === 'concreto'
+                ? 'bg-emerald-700 text-white shadow-xs'
+                : 'bg-white/80 hover:bg-white text-emerald-950 border border-emerald-200'
+            }`}
+          >
+            <span>🍎 Material Concreto (COPISI)</span>
+          </button>
+        </div>
+
+        {activeTab === 'concreto' ? (
+          <div className="p-3 sm:p-4 overflow-y-auto">
+            <MatematicaConcretaWidget soundEnabled={soundEnabled} />
+          </div>
+        ) : (
+          <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
           {/* Quick Examples Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
             <span className="text-[11px] font-bold text-stone-500 shrink-0 flex items-center gap-1">
@@ -579,6 +618,7 @@ export const CalculadoraEscolar: React.FC<CalculadoraEscolarProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

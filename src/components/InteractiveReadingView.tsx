@@ -2,20 +2,21 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DuaSettings } from '../types';
 import { speechReader } from '../utils/speechReader';
 import { formatTextWithSyllables } from '../utils/syllables';
-import { findGlossaryTerms, CHILD_GLOSSARY, GlossaryEntry } from '../data/glossary';
+import { findGlossaryTerms, GlossaryEntry } from '../data/glossary';
+import { breakIntoChildStoryCards } from '../utils/childTextSplitter';
+import { FaunaAvatar, FaunaSpecies } from './FaunaAvatars';
+import { soundFx } from '../utils/soundEffects';
 import {
   Volume2,
-  VolumeX,
+  Square,
+  Sparkles,
+  ArrowRight,
+  ArrowLeft,
+  BookOpen,
+  X,
+  Rocket,
   Play,
   Pause,
-  Square,
-  BookOpen,
-  Sparkles,
-  Info,
-  X,
-  CheckCircle2,
-  HelpCircle,
-  Eye,
 } from 'lucide-react';
 
 interface InteractiveReadingViewProps {
@@ -26,7 +27,12 @@ interface InteractiveReadingViewProps {
   unidad?: string;
   settings: DuaSettings;
   highlightParagraph?: string | null;
+  guideSpecies?: FaunaSpecies;
+  onNext?: () => void;
+  nextButtonLabel?: string;
 }
+
+const CARD_ICONS = ['🌲', '🐾', '☀️', '🌋', '🌊', '⭐', '🦉', '🍃', '🌸', '✨'];
 
 export const InteractiveReadingView: React.FC<InteractiveReadingViewProps> = ({
   title,
@@ -36,296 +42,306 @@ export const InteractiveReadingView: React.FC<InteractiveReadingViewProps> = ({
   unidad,
   settings,
   highlightParagraph,
+  guideSpecies = 'pudu',
+  onNext,
+  nextButtonLabel = '¡A Jugar la Trivia! 🚀',
 }) => {
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [activeWordIdx, setActiveWordIdx] = useState<number | null>(null);
+  const cards = breakIntoChildStoryCards(text);
+  const totalCards = cards.length;
+
+  const [currentCardIdx, setCurrentCardIdx] = useState<number>(0);
+  const [slideDirection, setSlideDirection] = useState<'right' | 'left'>('right');
+  const [isPlayingCurrent, setIsPlayingCurrent] = useState<boolean>(false);
   const [selectedGlossary, setSelectedGlossary] = useState<GlossaryEntry | null>(null);
-  const [rulerTop, setRulerTop] = useState<number>(0);
-  const [isRulerVisible, setIsRulerVisible] = useState<boolean>(false);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Stop speech when component unmounts or text changes
+  // Reset card on text change
   useEffect(() => {
-    return () => {
-      speechReader.stop();
-    };
+    setCurrentCardIdx(0);
+    speechReader.stop();
+    setIsPlayingCurrent(false);
   }, [text]);
 
-  const handleTogglePlay = () => {
-    if (isPlaying) {
-      if (isPaused) {
-        speechReader.resume();
-        setIsPaused(false);
-      } else {
-        speechReader.pause();
-        setIsPaused(true);
-      }
+  // Stop speech when changing cards
+  useEffect(() => {
+    speechReader.stop();
+    setIsPlayingCurrent(false);
+  }, [currentCardIdx]);
+
+  const currentCardText = cards[currentCardIdx] || text;
+  const isLastCard = currentCardIdx === totalCards - 1;
+  const isFirstCard = currentCardIdx === 0;
+
+  const handleNextCard = () => {
+    if (isLastCard) {
+      soundFx.playCelebration();
+      speechReader.stop();
+      if (onNext) onNext();
     } else {
-      setIsPlaying(true);
-      setIsPaused(false);
-      setActiveWordIdx(0);
+      soundFx.playPop();
+      setSlideDirection('right');
+      setCurrentCardIdx((prev) => prev + 1);
+    }
+  };
 
+  const handlePrevCard = () => {
+    if (!isFirstCard) {
+      soundFx.playPop();
+      setSlideDirection('left');
+      setCurrentCardIdx((prev) => prev - 1);
+    }
+  };
+
+  const handleSpeakCard = () => {
+    if (isPlayingCurrent) {
+      speechReader.stop();
+      setIsPlayingCurrent(false);
+    } else {
+      setIsPlayingCurrent(true);
       const rate = settings.speechSpeed === 'slow' ? 0.8 : 1.0;
-
-      speechReader.speak(text, {
+      speechReader.speak(currentCardText, {
         rate,
-        onBoundary: (charIdx) => {
-          // approximate word position
-          setActiveWordIdx(charIdx);
-        },
-        onEnd: () => {
-          setIsPlaying(false);
-          setIsPaused(false);
-          setActiveWordIdx(null);
-        },
-        onError: () => {
-          setIsPlaying(false);
-          setIsPaused(false);
-          setActiveWordIdx(null);
-        },
+        onEnd: () => setIsPlayingCurrent(false),
+        onError: () => setIsPlayingCurrent(false),
       });
     }
   };
 
-  const handleStop = () => {
-    speechReader.stop();
-    setIsPlaying(false);
-    setIsPaused(false);
-    setActiveWordIdx(null);
-  };
+  const displayedText = settings.syllableMode
+    ? formatTextWithSyllables(currentCardText)
+    : currentCardText;
 
-  const handleSpeakGlossary = (entry: GlossaryEntry) => {
-    const speechText = `${entry.palabra}: ${entry.significado}. Por ejemplo: ${entry.ejemplo}`;
-    speechReader.speak(speechText, { rate: settings.speechSpeed === 'slow' ? 0.85 : 1.0 });
-  };
+  const glossaryTerms = findGlossaryTerms(currentCardText);
 
-  // Tracking mouse / touch for reading ruler
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!settings.readingRuler || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const relativeY = e.clientY - rect.top;
-    setRulerTop(Math.max(10, Math.min(rect.height - 40, relativeY - 20)));
-    setIsRulerVisible(true);
-  };
-
-  const handleMouseLeave = () => {
-    if (settings.readingRuler) {
-      setIsRulerVisible(false);
-    }
-  };
-
-  // Font size mapping
+  // Dynamic font sizing
   const textSizeClass =
     settings.fontSize === 'gigante'
-      ? 'text-lg sm:text-xl leading-loose tracking-wide'
+      ? 'text-xl sm:text-2xl md:text-3xl leading-relaxed tracking-wide'
       : settings.fontSize === 'grande'
-      ? 'text-base sm:text-lg leading-relaxed tracking-normal'
-      : 'text-sm sm:text-base leading-relaxed';
-
-  // Process text for syllables and interactive glossary terms
-  const glossaryList = findGlossaryTerms(text);
-
-  const displayedText = settings.syllableMode ? formatTextWithSyllables(text) : text;
+      ? 'text-lg sm:text-xl md:text-2xl leading-relaxed tracking-normal'
+      : 'text-base sm:text-lg md:text-xl leading-relaxed';
 
   return (
-    <div
-      ref={containerRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      className={`relative rounded-2xl border p-5 md:p-6 mb-6 transition-all select-text ${
-        settings.sensoryMode === 'calm'
-          ? 'bg-emerald-50/40 border-emerald-200 text-emerald-950'
-          : 'bg-amber-50/30 border-amber-200 text-stone-800'
-      }`}
-    >
-      {/* Reading Ruler Overlay */}
-      {settings.readingRuler && isRulerVisible && (
-        <div
-          className="absolute left-0 right-0 pointer-events-none transition-transform duration-75 z-10"
-          style={{ top: `${rulerTop}px` }}
-        >
-          <div className="h-10 bg-amber-400/20 border-y-2 border-amber-500/60 shadow-sm flex items-center justify-between px-3">
-            <span className="text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded shadow-2xs">
-              Línea en lectura
-            </span>
+    <div className="w-full h-full max-h-full flex flex-col justify-between rounded-3xl border-3 sm:border-4 border-amber-300/80 bg-gradient-to-b from-amber-50/70 via-white to-amber-50/40 p-3 sm:p-5 shadow-lg relative overflow-hidden select-none">
+      {/* 1. Header: Animal Companion Greeting & Slide Footprints */}
+      <div className="shrink-0 flex items-center justify-between gap-2 pb-2 border-b-2 border-amber-200/60 mb-1">
+        <div className="flex items-center gap-2">
+          <FaunaAvatar
+            species={guideSpecies}
+            mood={isPlayingCurrent ? 'speaking' : isLastCard ? 'celebrating' : 'happy'}
+            size="xs"
+            className="shrink-0 scale-105"
+          />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-400 text-stone-900 shadow-2xs">
+                📖 Cuento Ilustrado
+              </span>
+              <span className="text-xs font-bold text-stone-600 hidden sm:inline">
+                {title || 'Lectura Oficial'}
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm font-black text-amber-900 mt-0.5">
+              {isLastCard
+                ? '¡Llegaste al final! ¿Listo para el desafío? 🌟'
+                : `Página ${currentCardIdx + 1} de ${totalCards}: Lee o escucha con atención 👇`}
+            </p>
           </div>
         </div>
-      )}
 
-      {/* Header with Title & Audio Playback Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-4 border-b border-stone-200/60">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-amber-600" />
-              Lectura Oficial ({nivel})
-            </span>
-            {genre && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 border border-stone-200">
-                {genre}
-              </span>
-            )}
-            {settings.syllableMode && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 border border-amber-300 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" />
-                Modo Sílabas Activo
-              </span>
-            )}
+        {/* Audio Speaker for Current Slide */}
+        <button
+          type="button"
+          id="btn-play-card-audio"
+          onClick={handleSpeakCard}
+          className={`px-2.5 py-1.5 rounded-2xl text-xs font-black inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+            isPlayingCurrent
+              ? 'bg-red-500 text-white animate-pulse'
+              : 'bg-white hover:bg-amber-100 text-amber-900 border-2 border-amber-300'
+          }`}
+          title="Escuchar esta página en voz alta"
+        >
+          {isPlayingCurrent ? (
+            <>
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>Detener</span>
+            </>
+          ) : (
+            <>
+              <Volume2 className="w-3.5 h-3.5 text-amber-600" />
+              <span>Voz 🔊</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* 2. Main Story Card with Left/Right Giant Touch Arrows (Carousel Stage) */}
+      <div className="flex-1 min-h-0 flex items-center justify-between gap-2 sm:gap-4 my-1 relative">
+        {/* Giant Left Arrow ⬅️ */}
+        <button
+          type="button"
+          id="btn-card-prev"
+          disabled={isFirstCard}
+          onClick={handlePrevCard}
+          className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-lg sm:text-xl transition-all cursor-pointer shrink-0 shadow-sm ${
+            isFirstCard
+              ? 'opacity-20 cursor-not-allowed bg-stone-100 text-stone-400'
+              : 'bg-white hover:bg-amber-100 text-amber-900 border-2 border-amber-300 hover:scale-105 active:scale-90'
+          }`}
+          title="Página anterior"
+        >
+          <ArrowLeft className="w-5 h-5 sm:w-7 sm:h-7 stroke-[3]" />
+        </button>
+
+        {/* Center Animated Slide Card */}
+        <div
+          key={currentCardIdx}
+          className={`flex-1 h-full max-h-full bg-white/95 rounded-2xl sm:rounded-3xl border-2 border-amber-200 p-3 sm:p-6 shadow-sm flex flex-col justify-center items-center text-center relative overflow-y-auto ${
+            slideDirection === 'right' ? 'animate-slide-right' : 'animate-slide-left'
+          }`}
+        >
+          {/* Fun Thematic Icon */}
+          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl bg-amber-100/80 border border-amber-300 flex items-center justify-center text-2xl sm:text-3xl shadow-inner mb-2 select-none shrink-0">
+            {CARD_ICONS[currentCardIdx % CARD_ICONS.length]}
           </div>
-          {title && (
-            <h3 className="text-base sm:text-lg font-bold text-stone-900 leading-snug">
-              {title}
-            </h3>
+
+          {/* Text: Friendly font for children */}
+          <p className={`${textSizeClass} font-serif font-medium text-stone-900 max-w-2xl leading-relaxed`}>
+            {displayedText}
+          </p>
+
+          {/* Key Paragraph Hint Highlight (if active) */}
+          {highlightParagraph && currentCardText.includes(highlightParagraph.slice(0, 15)) && (
+            <div className="mt-2 px-2.5 py-1 rounded-xl bg-amber-100 border border-amber-400 text-amber-950 text-xs font-bold animate-pulse">
+              ⭐ ¡Aquí está la pista del cuento!
+            </div>
+          )}
+
+          {/* Interactive Vocabulary Chips on this card */}
+          {glossaryTerms.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+              <span className="text-[10px] sm:text-[11px] font-bold text-amber-800 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-600" />
+                Palabras mágicas:
+              </span>
+              {glossaryTerms.map((term) => (
+                <button
+                  key={term.palabra}
+                  type="button"
+                  onClick={() => {
+                    soundFx.playBubble();
+                    setSelectedGlossary(term);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-[11px] font-black text-amber-950 inline-flex items-center gap-1 shadow-2xs hover:scale-105 active:scale-95 cursor-pointer transition-all"
+                >
+                  <span>{term.icono}</span>
+                  <span>{term.palabra}</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Audio Player Controls */}
-        <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-stone-200 shadow-2xs self-start sm:self-auto">
+        {/* Giant Right Arrow ➡️ or Golden "Play Trivia" Button */}
+        {isLastCard ? (
           <button
             type="button"
-            id="btn-play-story-audio"
-            onClick={handleTogglePlay}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
-              isPlaying
-                ? 'bg-amber-600 text-white shadow-2xs'
-                : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
-            }`}
-            title="Escuchar narración del cuento"
+            id="btn-card-launch-trivia"
+            onClick={handleNextCard}
+            className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 active:scale-95 text-white border-2 border-amber-200 flex flex-col items-center justify-center shadow-md transition-all cursor-pointer shrink-0 animate-bounce"
+            title="¡Comenzar la Trivia!"
           >
-            {isPlaying ? (
-              isPaused ? (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Continuar</span>
-                </>
-              ) : (
-                <>
-                  <Pause className="w-3.5 h-3.5 fill-current" />
-                  <span>Pausar</span>
-                </>
-              )
-            ) : (
-              <>
-                <Volume2 className="w-3.5 h-3.5 text-amber-600" />
-                <span>Escuchar lectura</span>
-              </>
-            )}
+            <Rocket className="w-5 h-5 sm:w-7 sm:h-7" />
+            <span className="text-[9px] font-black uppercase mt-0.5">Jugar</span>
           </button>
+        ) : (
+          <button
+            type="button"
+            id="btn-card-next"
+            onClick={handleNextCard}
+            className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-90 text-white border-2 border-amber-300 hover:scale-105 flex items-center justify-center text-lg sm:text-xl transition-all cursor-pointer shrink-0 shadow-sm animate-pulse"
+            title="Siguiente página del cuento"
+          >
+            <ArrowRight className="w-5 h-5 sm:w-7 sm:h-7 stroke-[3]" />
+          </button>
+        )}
+      </div>
 
-          {isPlaying && (
+      {/* 3. Bottom Footprint Trail & Next Button Banner: Pinned at bottom */}
+      <div className="shrink-0 pt-1.5 flex items-center justify-between gap-2 border-t border-amber-200/50">
+        {/* Footprints / Page Dots */}
+        <div className="flex items-center gap-1.5">
+          {cards.map((_, idx) => (
             <button
+              key={idx}
               type="button"
-              id="btn-stop-story-audio"
-              onClick={handleStop}
-              className="p-1.5 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-100 transition-colors cursor-pointer"
-              title="Detener audio"
+              onClick={() => {
+                soundFx.playPop();
+                setSlideDirection(idx > currentCardIdx ? 'right' : 'left');
+                setCurrentCardIdx(idx);
+              }}
+              className={`transition-all rounded-full cursor-pointer flex items-center justify-center ${
+                currentCardIdx === idx
+                  ? 'w-7 h-7 bg-amber-500 text-white font-black text-xs shadow-2xs scale-105'
+                  : idx < currentCardIdx
+                  ? 'w-6 h-6 bg-amber-200 text-amber-900 font-bold text-[11px]'
+                  : 'w-6 h-6 bg-stone-200 text-stone-500 font-bold text-[11px]'
+              }`}
+              title={`Ir a página ${idx + 1}`}
             >
-              <Square className="w-3.5 h-3.5 fill-current" />
+              {idx < currentCardIdx ? '✓' : idx + 1}
             </button>
-          )}
-
-          <div className="text-[11px] font-semibold text-stone-500 border-l border-stone-200 pl-2">
-            {settings.speechSpeed === 'slow' ? '🐢 0.8x' : '🐇 1.0x'}
-          </div>
+          ))}
         </div>
+
+        {/* Big Golden Action Banner if on last page */}
+        {isLastCard ? (
+          <button
+            type="button"
+            id="btn-reading-next-step"
+            onClick={handleNextCard}
+            className="px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-black text-xs sm:text-sm inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer animate-pulse"
+          >
+            <span>{nextButtonLabel}</span>
+            <Rocket className="w-4 h-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleNextCard}
+            className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs inline-flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+          >
+            <span>Página {currentCardIdx + 2}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
-      {/* Main Text Content */}
-      <div className={`relative ${textSizeClass} font-serif whitespace-pre-line text-stone-800`}>
-        {displayedText}
-      </div>
-
-      {/* Key Paragraph Hint Highlight (triggered by "Pista del Profesor") */}
-      {highlightParagraph && (
-        <div className="mt-4 p-3.5 rounded-xl bg-amber-100/90 border-2 border-amber-400 text-amber-950 text-xs sm:text-sm animate-fadeIn">
-          <div className="flex items-center gap-1.5 font-bold mb-1 text-amber-900">
-            <HelpCircle className="w-4 h-4 text-amber-700" />
-            <span>Pista Clave en el Texto:</span>
-          </div>
-          <p className="italic font-serif leading-relaxed">
-            "{highlightParagraph}"
-          </p>
-        </div>
-      )}
-
-      {/* Child-Friendly Interactive Vocabulary Chips */}
-      {glossaryList.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-stone-200/60">
-          <div className="text-[11px] font-bold text-stone-600 mb-2 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Palabras mágicas del cuento (toca para ver qué significan):</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {glossaryList.map((entry) => (
-              <button
-                key={entry.palabra}
-                type="button"
-                id={`btn-glossary-${entry.palabra.toLowerCase().replace(/\s+/g, '-')}`}
-                onClick={() => setSelectedGlossary(entry)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-stone-200 hover:border-amber-400 text-xs font-medium text-stone-700 hover:bg-amber-50 inline-flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-              >
-                <span>{entry.icono}</span>
-                <span className="font-bold text-amber-900">{entry.palabra}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Interactive Glossary Modal / Card */}
+      {/* Vocabulary Card Modal */}
       {selectedGlossary && (
         <div className="fixed inset-0 z-50 bg-stone-900/40 backdrop-blur-2xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-stone-200 max-w-sm w-full p-5 shadow-xl animate-scaleIn">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2.5">
+          <div className="bg-white rounded-3xl border-3 border-amber-300 max-w-sm w-full p-5 shadow-2xl animate-console-step">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
                 <span className="text-3xl">{selectedGlossary.icono}</span>
-                <div>
-                  <h4 className="text-base font-bold text-stone-900 leading-snug">
-                    {selectedGlossary.palabra}
-                  </h4>
-                  <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                    Vocabulario Mineduc
-                  </span>
-                </div>
+                <h4 className="text-base font-black text-stone-900">{selectedGlossary.palabra}</h4>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedGlossary(null)}
-                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer"
+                className="p-1 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/70 mb-3 text-sm text-stone-800 leading-relaxed">
-              <strong className="block text-xs font-bold uppercase text-amber-900 mb-1">
-                ¿Qué significa?
-              </strong>
+            <p className="text-sm text-stone-800 leading-relaxed mb-2 bg-amber-50 p-3 rounded-2xl border border-amber-200">
               {selectedGlossary.significado}
-            </div>
-
-            <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 mb-4 text-xs text-stone-600 leading-relaxed">
-              <strong className="block font-bold text-stone-700 mb-0.5">Ejemplo en una oración:</strong>
-              <span className="italic font-serif">"{selectedGlossary.ejemplo}"</span>
-            </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                id="btn-speak-glossary-modal"
-                onClick={() => handleSpeakGlossary(selectedGlossary)}
-                className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Volume2 className="w-4 h-4 text-amber-700" />
-                <span>Escuchar significado</span>
-              </button>
-
+            </p>
+            <p className="text-xs text-stone-500 italic mb-3">"{selectedGlossary.ejemplo}"</p>
+            <div className="flex justify-end">
               <button
                 type="button"
                 onClick={() => setSelectedGlossary(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-stone-900 text-white hover:bg-stone-800 transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-black bg-stone-900 text-white cursor-pointer"
               >
                 ¡Entendido!
               </button>

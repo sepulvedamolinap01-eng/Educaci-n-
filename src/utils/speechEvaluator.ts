@@ -99,6 +99,24 @@ export function calculateSimilarity(a: string, b: string): number {
   // Si fonéticamente es idéntico (ej: "corazon" vs "corazón", "baca" vs "vaca") es 100%
   if (phA === phB) return 1.0;
 
+  // Tolerancia pedagógica infantil: singular/plural (ej: "ostras" vs "ostra", "perros" vs "perro")
+  if (
+    (normA.endsWith('s') && normA.slice(0, -1) === normB) ||
+    (normB.endsWith('s') && normB.slice(0, -1) === normA) ||
+    (normA.endsWith('es') && normA.slice(0, -2) === normB) ||
+    (normB.endsWith('es') && normB.slice(0, -2) === normA)
+  ) {
+    return 0.95;
+  }
+
+  // Tolerancia infantil a diminutivos cariñosos (ej: "gatito" vs "gato", "perrito" vs "perro")
+  if (
+    (normA.endsWith('ito') && normA.replace(/ito$/, 'o') === normB) ||
+    (normA.endsWith('ita') && normA.replace(/ita$/, 'a') === normB)
+  ) {
+    return 0.92;
+  }
+
   return Math.max(orthoScore, phScore);
 }
 

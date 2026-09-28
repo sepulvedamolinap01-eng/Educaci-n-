@@ -1,55 +1,38 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { getUnitsForNivel, getNivelInfo, MineducUnitDefinition } from '../data/mineducUnits';
+import React, { useState, useEffect } from 'react';
+import { getUnitsForNivel, MineducUnitDefinition } from '../data/mineducUnits';
 import { getSampleTextsForNivel } from '../data/mineducTexts';
-import { getHistoriaUnitsForNivel, MINEDUC_HISTORIA_CURRICULUM } from '../data/historiaUnits';
+import { getHistoriaUnitsForNivel } from '../data/historiaUnits';
 import { getHistoriaSampleTextsForNivel } from '../data/historiaTexts';
 import {
   getMatematicaUnitsForNivel,
-  MINEDUC_MATEMATICA_CURRICULUM,
   getMatematicaSampleTextsForNivel,
 } from '../data/matematicaUnits';
 import { getCienciasUnitsForNivel, getCienciasSampleTextsForNivel } from '../data/cienciasUnits';
 import { getInglesUnitsForNivel, getInglesSampleTextsForNivel } from '../data/inglesUnits';
-import { MatematicaConcretaWidget } from './MatematicaConcretaWidget';
 import { CalculadoraEscolar } from './CalculadoraEscolar';
 import { FaunaAvatar, FaunaSpecies } from './FaunaAvatars';
 import { FaunaGuiaModal } from './FaunaGuiaModal';
-import { FaunaUnitComicGuide } from './FaunaUnitComicGuide';
 import { MineducQuizResult, SampleMineducText, DuaSettings, AsignaturaType } from '../types';
+import { InteractiveReadingView } from './InteractiveReadingView';
 import { InteractiveQuiz } from './InteractiveQuiz';
 import { JsonExportView } from './JsonExportView';
 import { EnglishWordMatchGame } from './EnglishWordMatchGame';
-import { InteractiveFaunaCompanion } from './InteractiveFaunaCompanion';
 import { AlbumLaminasModal } from './AlbumLaminasModal';
 import { DocentePanelModal } from './DocentePanelModal';
 import { getUnlockedLaminas } from '../data/albumLaminas';
 import { soundFx } from '../utils/soundEffects';
-import { getBilingualLinesForText } from '../data/inglesTranslations';
-import { formatTextWithSyllables } from '../utils/syllables';
 import { speechReader } from '../utils/speechReader';
 import {
   ArrowLeft,
   BookOpen,
-  Compass,
-  Calculator,
-  Printer,
-  Edit3,
-  Upload,
   Volume2,
   Square,
-  Eye,
-  Sliders,
-  Check,
-  X,
-  Sparkles,
-  Gamepad2,
-  Code2,
-  ChevronRight,
-  Home,
-  FlaskConical,
-  Languages,
   Star,
   Award,
+  Sliders,
+  Sparkles,
+  Trophy,
+  Home,
 } from 'lucide-react';
 
 interface CourseDetailViewProps {
@@ -79,8 +62,6 @@ interface CourseDetailViewProps {
   soundscapePlaying?: boolean;
 }
 
-const ALL_COURSES = ['1° Básico', '2° Básico', '3° Básico', '4° Básico'];
-
 export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
   selectedNivel,
   selectedUnidad,
@@ -106,20 +87,25 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
   onOpenSoundscapes,
   soundscapePlaying = false,
 }) => {
+  // Wizard state machine:
+  // 0 = Cuento en Diapositivas (Story Cards)
+  // 1 .. totalQuestions = Desafíos de Trivia
+  // totalQuestions + 1 = Gran Fiesta de Recompensas
+  const [currentStep, setCurrentStep] = useState<number>(0);
+
   const [activeTab, setActiveTab] = useState<'quiz' | 'json'>('quiz');
-  const [showTextEditor, setShowTextEditor] = useState<boolean>(false);
-  const [showDuaModal, setShowDuaModal] = useState<boolean>(false);
   const [showCalculadora, setShowCalculadora] = useState<boolean>(false);
   const [showFaunaModal, setShowFaunaModal] = useState<boolean>(false);
   const [isSpeakingReading, setIsSpeakingReading] = useState<boolean>(false);
-  const [showEnglishTranslation, setShowEnglishTranslation] = useState<boolean>(true);
-  const [englishLangOrder, setEnglishLangOrder] = useState<'en-first' | 'es-first'>('en-first');
-  const [showTechnicalCurriculum, setShowTechnicalCurriculum] = useState<boolean>(false);
-  const [rulerTop, setRulerTop] = useState<number>(0);
-  const [isRulerVisible, setIsRulerVisible] = useState<boolean>(false);
   const [showAlbumModal, setShowAlbumModal] = useState<boolean>(false);
   const [showDocenteModal, setShowDocenteModal] = useState<boolean>(false);
   const [unlockedLaminas, setUnlockedLaminas] = useState<string[]>(() => getUnlockedLaminas());
+
+  useEffect(() => {
+    setCurrentStep(0);
+    speechReader.stop();
+    setIsSpeakingReading(false);
+  }, [selectedUnidad, selectedNivel, selectedAsignatura]);
 
   const handleOpenAlbum = () => {
     soundFx.playMagicStar();
@@ -130,18 +116,6 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
   const isGrade1or2 = selectedNivel === '1° Básico' || selectedNivel === '2° Básico';
   const isEarlyLearningMode =
     duaSettings.earlyLearningMode !== undefined ? duaSettings.earlyLearningMode : isGrade1or2;
-
-  const [englishTab, setEnglishTab] = useState<'game' | 'sentences'>(
-    isEarlyLearningMode ? 'game' : 'sentences'
-  );
-
-  useEffect(() => {
-    if (isEarlyLearningMode) {
-      setEnglishTab('game');
-    }
-  }, [selectedNivel, isEarlyLearningMode]);
-
-  const textContainerRef = useRef<HTMLDivElement>(null);
 
   const isHistoria = selectedAsignatura === 'historia';
   const isMatematica = selectedAsignatura === 'matematica';
@@ -158,8 +132,7 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
     ? 'rana'
     : 'llama';
 
-  // Units and samples filtered strictly by active subject
-  const unitsForNivel = isHistoria
+  const currentUnits: any[] = isHistoria
     ? getHistoriaUnitsForNivel(selectedNivel)
     : isMatematica
     ? getMatematicaUnitsForNivel(selectedNivel)
@@ -169,7 +142,14 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
     ? getInglesUnitsForNivel(selectedNivel)
     : getUnitsForNivel(selectedNivel);
 
-  const sampleTexts = isHistoria
+  const currentUnitDef =
+    currentUnits.find(
+      (u: any) =>
+        u.nombre.toLowerCase().includes(selectedUnidad.toLowerCase()) ||
+        selectedUnidad.toLowerCase().includes(u.numero.toLowerCase())
+    ) || currentUnits[0];
+
+  const currentSamples: any[] = isHistoria
     ? getHistoriaSampleTextsForNivel(selectedNivel)
     : isMatematica
     ? getMatematicaSampleTextsForNivel(selectedNivel)
@@ -179,818 +159,286 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
     ? getInglesSampleTextsForNivel(selectedNivel)
     : getSampleTextsForNivel(selectedNivel);
 
-  const currentUnitDef =
-    unitsForNivel.find(
-      (u) =>
-        u.nombre === selectedUnidad ||
-        u.numero === selectedUnidad ||
-        selectedUnidad.includes(u.numero)
-    ) || unitsForNivel[0];
+  const currentSample = currentSamples.find(
+    (s: any) => s.unidad === currentUnitDef.numero || s.title.includes(currentUnitDef.numero)
+  );
 
-  const currentSample = sampleTexts.find((s) => s.unidad === currentUnitDef.numero);
-
-  // Stop active speech when context shifts
-  useEffect(() => {
-    speechReader.stop();
-    setIsSpeakingReading(false);
-  }, [selectedNivel, selectedUnidad, selectedAsignatura, inputText]);
-
-  const handleUnitClick = (unitDef: MineducUnitDefinition) => {
-    speechReader.stop();
-    setIsSpeakingReading(false);
-    onSelectUnidad(unitDef.nombre);
-    if (unitDef.oas && unitDef.oas.length > 0) {
-      onSelectObjetivo(unitDef.oas.join(', '));
-    }
-    const matchingSample = sampleTexts.find((s) => s.unidad === unitDef.numero);
-    if (matchingSample) {
-      onSelectSampleText(matchingSample);
-    }
-  };
+  const totalQuestions = quizData.preguntas?.length || 3;
 
   const handleTogglePlayReading = () => {
     if (isSpeakingReading) {
       speechReader.stop();
       setIsSpeakingReading(false);
     } else {
-      const rate = duaSettings.speechSpeed === 'slow' ? 0.75 : isIngles ? 0.82 : 1.0;
+      setIsSpeakingReading(true);
+      const rate = duaSettings.speechSpeed === 'slow' ? 0.8 : 1.0;
       speechReader.speak(inputText, {
         rate,
-        lang: isIngles ? 'en-US' : 'es-CL',
-        onStart: () => setIsSpeakingReading(true),
         onEnd: () => setIsSpeakingReading(false),
         onError: () => setIsSpeakingReading(false),
       });
     }
   };
 
-  const handleToggleSyllables = () => {
-    onChangeDuaSettings((prev) => ({
-      ...prev,
-      syllableMode: !prev.syllableMode,
-    }));
-  };
-
-  const handleToggleReadingRuler = () => {
-    const nextState = !duaSettings.readingRuler;
-    onChangeDuaSettings((prev) => ({
-      ...prev,
-      readingRuler: nextState,
-    }));
-    if (!nextState) {
-      setIsRulerVisible(false);
-    }
-  };
-
-  const handleMouseMoveText = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!duaSettings.readingRuler || !textContainerRef.current) return;
-    const rect = textContainerRef.current.getBoundingClientRect();
-    const relativeY = e.clientY - rect.top;
-    setRulerTop(Math.max(8, Math.min(rect.height - 36, relativeY - 18)));
-    setIsRulerVisible(true);
-  };
-
-  const handleMouseLeaveText = () => {
-    if (duaSettings.readingRuler) {
-      setIsRulerVisible(false);
-    }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        if (text) {
-          onChangeInputText(text);
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  // Font size styles for reading
-  const textSizeClass =
-    duaSettings.fontSize === 'gigante'
-      ? 'text-lg sm:text-xl leading-loose font-serif'
-      : duaSettings.fontSize === 'grande'
-      ? 'text-base sm:text-lg leading-relaxed font-serif'
-      : 'text-sm sm:text-base leading-relaxed font-serif';
-
-  const displayedReadingText = duaSettings.syllableMode
-    ? formatTextWithSyllables(inputText)
-    : inputText;
-
-  // Modern subject theme
   const theme = isHistoria
-    ? {
-        primary: 'bg-sky-600 hover:bg-sky-700',
-        text: 'text-sky-700',
-        badge: 'bg-sky-100 text-sky-900 border-sky-200',
-        activePill: 'bg-sky-600 text-white shadow-xs',
-        border: 'border-sky-300',
-        lightBg: 'bg-sky-50/50',
-      }
+    ? { badge: 'bg-amber-100 text-amber-900 border-amber-300', title: 'Historia' }
     : isMatematica
-    ? {
-        primary: 'bg-emerald-600 hover:bg-emerald-700',
-        text: 'text-emerald-700',
-        badge: 'bg-emerald-100 text-emerald-900 border-emerald-200',
-        activePill: 'bg-emerald-600 text-white shadow-xs',
-        border: 'border-emerald-300',
-        lightBg: 'bg-emerald-50/50',
-      }
+    ? { badge: 'bg-emerald-100 text-emerald-900 border-emerald-300', title: 'Matemática' }
     : isCiencias
-    ? {
-        primary: 'bg-teal-700 hover:bg-teal-800',
-        text: 'text-teal-800',
-        badge: 'bg-teal-100 text-teal-950 border-teal-300',
-        activePill: 'bg-teal-700 text-white shadow-xs',
-        border: 'border-teal-300',
-        lightBg: 'bg-teal-50/50',
-      }
+    ? { badge: 'bg-teal-100 text-teal-900 border-teal-300', title: 'Ciencias' }
     : isIngles
-    ? {
-        primary: 'bg-indigo-600 hover:bg-indigo-700',
-        text: 'text-indigo-700',
-        badge: 'bg-indigo-100 text-indigo-950 border-indigo-300',
-        activePill: 'bg-indigo-600 text-white shadow-xs',
-        border: 'border-indigo-300',
-        lightBg: 'bg-indigo-50/50',
-      }
-    : {
-        primary: 'bg-amber-600 hover:bg-amber-700',
-        text: 'text-amber-700',
-        badge: 'bg-amber-100 text-amber-900 border-amber-200',
-        activePill: 'bg-amber-600 text-white shadow-xs',
-        border: 'border-amber-300',
-        lightBg: 'bg-amber-50/50',
-      };
+    ? { badge: 'bg-indigo-100 text-indigo-900 border-indigo-300', title: 'Inglés' }
+    : { badge: 'bg-amber-100 text-amber-900 border-amber-300', title: 'Lenguaje' };
 
   return (
-    <div className="space-y-5">
-      {/* Top Breadcrumb & Clean Back Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-stone-200/80 shadow-xs">
-        <nav
-          aria-label="Ruta de navegación"
-          className="flex items-center gap-1.5 text-xs text-stone-500 font-medium flex-wrap"
-        >
+    <div className="w-full h-full flex flex-col justify-between max-w-5xl mx-auto overflow-hidden select-none">
+      {/* 1. Playful Top HUD Bar: Compact single row on all devices */}
+      <header className="shrink-0 bg-white/95 backdrop-blur-md border border-amber-300/90 rounded-2xl px-2 sm:px-3 py-1.5 mb-1.5 shadow-2xs flex items-center justify-between gap-1.5">
+        {/* Back button & Subject Badge */}
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={onBackToHome}
-            className="hover:text-amber-700 transition-colors cursor-pointer inline-flex items-center gap-1 font-semibold text-stone-700 hover:underline"
+            id="btn-back-to-home-hud"
+            onClick={() => {
+              soundFx.playPop();
+              speechReader.stop();
+              onBackToHome();
+            }}
+            className="p-1 sm:px-2 sm:py-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-black inline-flex items-center gap-1 transition-all cursor-pointer active:scale-95 border border-stone-200 shadow-2xs"
+            title="Volver a la portada de cursos"
           >
             <Home className="w-3.5 h-3.5 text-amber-700" />
-            <span>Inicio</span>
-          </button>
-          <ChevronRight className="w-3 h-3 text-stone-300" />
-          <button
-            type="button"
-            onClick={onBackToSubjects}
-            className="hover:text-amber-700 transition-colors cursor-pointer font-semibold text-stone-700 hover:underline"
-          >
-            {selectedNivel}
-          </button>
-          <ChevronRight className="w-3 h-3 text-stone-300" />
-          <span className={`font-bold ${theme.text} flex items-center gap-1`}>
-            {isHistoria ? (
-              <Compass className="w-3.5 h-3.5" />
-            ) : isMatematica ? (
-              <Calculator className="w-3.5 h-3.5" />
-            ) : isCiencias ? (
-              <FlaskConical className="w-3.5 h-3.5" />
-            ) : isIngles ? (
-              <Languages className="w-3.5 h-3.5" />
-            ) : (
-              <BookOpen className="w-3.5 h-3.5" />
-            )}
-            <span>
-              {isHistoria
-                ? 'Historia'
-                : isMatematica
-                ? 'Matemática'
-                : isCiencias
-                ? 'Ciencias Naturales'
-                : isIngles
-                ? 'Inglés'
-                : 'Lenguaje'}
-            </span>
-          </span>
-        </nav>
-
-        {/* Action Buttons: Return Home or Return to Subjects */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            id="btn-back-to-home-bar"
-            onClick={onBackToHome}
-            className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer border border-amber-200"
-            title="Ir al inicio (cursos)"
-          >
-            <Home className="w-3.5 h-3.5 text-amber-700" />
-            <span>Ir a Inicio</span>
+            <span className="hidden sm:inline">Inicio</span>
           </button>
 
           <button
             type="button"
             id="btn-back-to-subjects"
-            onClick={onBackToSubjects}
-            className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer border border-stone-200"
-            title={`Volver a las asignaturas de ${selectedNivel}`}
+            onClick={() => {
+              soundFx.playPop();
+              speechReader.stop();
+              onBackToSubjects();
+            }}
+            className="px-2.5 py-1 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-950 text-xs font-black inline-flex items-center gap-1 transition-all cursor-pointer active:scale-95 border border-amber-300 shadow-2xs"
+            title="Volver a elegir asignatura"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Volver al menú</span>
+            <ArrowLeft className="w-3.5 h-3.5 stroke-[3]" />
+            <span className="hidden sm:inline">Volver</span>
           </button>
-        </div>
-      </div>
 
-      {/* Streamlined Unit Selector (Compact, Horizontal Pills - Saves Massive Space!) */}
-      <div className="bg-white rounded-2xl border border-stone-200/80 p-3 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black uppercase tracking-wider text-stone-400">
-              Unidades:
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap flex-1 sm:justify-end">
-            {unitsForNivel.map((unit) => {
-              const isSelected =
-                selectedUnidad === unit.nombre ||
-                selectedUnidad === unit.numero ||
-                selectedUnidad.includes(unit.numero);
-
-              return (
-                <button
-                  key={unit.numero}
-                  type="button"
-                  id={`unit-pill-${unit.numero.toLowerCase().replace(/\s+/g, '-')}`}
-                  onClick={() => handleUnitClick(unit)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    isSelected
-                      ? `${theme.activePill}`
-                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200/70'
-                  }`}
-                >
-                  <span>{unit.numero}</span>
-                  <span className="hidden md:inline font-normal text-[11px] opacity-90 truncate max-w-[120px]">
-                    {unit.nombre.replace(/^Unidad \d+:\s*/, '')}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Dynamic Fauna Mascot with Comic Thought Bubble */}
-      <FaunaUnitComicGuide
-        species={guideSpecies}
-        asignatura={selectedAsignatura}
-        nivel={selectedNivel}
-        unidad={currentUnitDef.nombre}
-        soundEnabled={true}
-      />
-
-      {/* Reading / Interactive Slate */}
-      <div className="bg-white rounded-3xl border border-stone-200/80 p-5 sm:p-7 shadow-xs space-y-4">
-        {/* Lesson Header & Child-Friendly Voice/DUA Toolbar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-stone-100">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              id="btn-lesson-fauna-guide"
-              onClick={() => setShowFaunaModal(true)}
-              className="hover:scale-105 transition-transform cursor-pointer p-1 rounded-2xl bg-stone-100/80 hover:bg-stone-200/60 border border-stone-200/80 shadow-2xs shrink-0"
-              title={`Animal Guía de Chile: ${isHistoria ? 'Cóndor Andino' : isMatematica ? 'Pingüino de Humboldt' : 'Llama Andina'} (clic para conocer)`}
-            >
-              <FaunaAvatar
-                species={guideSpecies}
-                size="xs"
-                mood={isSpeakingReading ? 'speaking' : 'happy'}
-              />
-            </button>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${theme.badge}`}>
-                  {currentUnitDef.numero}
-                </span>
-                <h3 className="text-base sm:text-lg font-black text-stone-900">
-                  {currentUnitDef.nombre}
-                </h3>
-                {isIngles && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-[11px] font-black text-indigo-700 shadow-2xs">
-                    <span>🇨🇱🇬🇧</span>
-                    <span>Modo Bilingüe con Traducción</span>
-                  </span>
-                )}
-              </div>
-              {isEarlyLearningMode ? (
-                <div className="text-xs text-stone-500 mt-1 flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 font-bold border border-amber-300 shadow-2xs">
-                    <span>🧸 Modo Aprendizaje Temprano</span>
-                  </span>
-                  <span className="text-stone-300">•</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowFaunaModal(true)}
-                    className="text-[11px] font-bold text-stone-600 hover:text-amber-800 underline decoration-dotted cursor-pointer transition-colors"
-                  >
-                    Guía: {isHistoria ? 'Cóndor Andino 🦅' : isMatematica ? 'Pingüino 🐧' : isCiencias ? 'Puma Chileno 🐆' : isIngles ? 'Rana de Darwin 🐸' : 'Llama Andina 🦙'}
-                  </button>
-                  <span className="text-stone-300">•</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowTechnicalCurriculum((prev) => !prev)}
-                    className="text-[10px] text-stone-400 hover:text-stone-600 underline cursor-pointer"
-                    title="Mostrar u ocultar código curricular oficial para docentes"
-                  >
-                    {showTechnicalCurriculum ? 'Ocultar código curricular' : 'Ver código OA (Docente)'}
-                  </button>
-                  {showTechnicalCurriculum && (
-                    <span className="text-[11px] text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md">
-                      OA oficial: <strong>{selectedObjetivo}</strong>
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                  <span>OA: <strong className="font-semibold text-stone-700">{selectedObjetivo}</strong></span>
-                  <span className="text-stone-300">•</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowFaunaModal(true)}
-                    className="text-[11px] font-bold text-stone-600 hover:text-amber-800 underline decoration-dotted cursor-pointer transition-colors"
-                  >
-                    Guía: {isHistoria ? 'Cóndor Andino 🦅' : isMatematica ? 'Pingüino 🐧' : isCiencias ? 'Puma Chileno 🐆' : isIngles ? 'Rana de Darwin 🐸' : 'Llama Andina 🦙'}
-                  </button>
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Clean, Focused Action Toolbar */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Primary Play/Stop Audio Button */}
-            <button
-              type="button"
-              id="btn-voice-reading-toggle"
-              onClick={() => {
-                soundFx.playPop();
-                handleTogglePlayReading();
-              }}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                isSpeakingReading
-                  ? 'bg-red-600 text-white ring-2 ring-red-300 animate-pulse'
-                  : `${theme.primary} text-white hover:opacity-90`
-              }`}
-              title={isSpeakingReading ? 'Detener lectura' : 'Escuchar la lectura en voz alta'}
-            >
-              {isSpeakingReading ? (
-                <>
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                  <span>Detener voz</span>
-                </>
-              ) : (
-                <>
-                  <Volume2 className="w-4 h-4" />
-                  <span>Escuchar lectura 🔊</span>
-                </>
-              )}
-            </button>
-
-            {/* Collectible Album Button */}
-            <button
-              type="button"
-              id="btn-open-album-toolbar"
-              onClick={handleOpenAlbum}
-              className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border border-amber-200"
-              title="Abrir mi Álbum de Láminas"
-            >
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-600" />
-              <span>Álbum ({unlockedLaminas.length}/12)</span>
-            </button>
-
-            {/* Calculadora Escolar button - exclusive to Matemática 1° a 4° Básico */}
-            {isMatematica && (
-              <button
-                type="button"
-                id="btn-open-calculadora-toolbar"
-                onClick={() => {
-                  soundFx.playBoing();
-                  setShowCalculadora(true);
-                }}
-                className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-900 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border border-emerald-200"
-                title="Abrir Calculadora Escolar Explicada (1° a 4° Básico)"
-              >
-                <span>🧮 Calculadora</span>
-              </button>
-            )}
-
-            {/* Bilingual Controls for English */}
-            {isIngles && (
-              <button
-                type="button"
-                id="btn-toggle-english-translation"
-                onClick={() => {
-                  soundFx.playBubble();
-                  setShowEnglishTranslation((prev) => !prev);
-                }}
-                className={`px-3 py-2 rounded-2xl text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer border active:scale-95 ${
-                  showEnglishTranslation
-                    ? 'bg-indigo-50 text-indigo-900 border-indigo-300 ring-1 ring-indigo-200'
-                    : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
-                }`}
-                title="Mostrar u ocultar la traducción en español"
-              >
-                <span>🇨🇱 Traducción</span>
-                {showEnglishTranslation && <Check className="w-3 h-3 text-indigo-700" />}
-              </button>
-            )}
-
-            {/* Taller de Voz del Animal Guía */}
-            {onOpenOralLab && (
-              <button
-                type="button"
-                id="btn-open-voice-lab-subject"
-                onClick={() => {
-                  soundFx.playPop();
-                  onOpenOralLab();
-                }}
-                className="px-3 py-2 rounded-2xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                title="Practicar pronunciación, números o lectura con el animal guía"
-              >
-                <span>🎙️ Taller de Voz</span>
-              </button>
-            )}
-
-            {/* Paisajes Sonoros Ambientales de Chile */}
-            {onOpenSoundscapes && (
-              <button
-                type="button"
-                id="btn-open-soundscapes-subject"
-                onClick={() => {
-                  soundFx.playPop();
-                  onOpenSoundscapes();
-                }}
-                className={`px-3 py-2 rounded-2xl text-xs font-bold border shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
-                  soundscapePlaying
-                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300 ring-1 ring-emerald-200'
-                    : 'bg-emerald-50/60 hover:bg-emerald-100/80 text-emerald-900 border-emerald-200'
-                }`}
-                title="Ambiente natural relajante para leer y concentrarse"
-              >
-                <span>🍃</span>
-                <span>{soundscapePlaying ? 'Ambiente Activo 🔊' : 'Paisaje Sonoro'}</span>
-              </button>
-            )}
-
-            {/* Teacher and Settings Hub button */}
-            <button
-              type="button"
-              id="btn-open-docente-panel"
-              onClick={() => {
-                soundFx.playPop();
-                setShowDocenteModal(true);
-              }}
-              className="px-3 py-2 rounded-2xl text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200 shadow-2xs inline-flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-              title="Ajustes DUA, editor de texto y currículum"
-            >
-              <span>💼 Herramientas</span>
-            </button>
-          </div>
+          <span className={`px-2 py-0.5 rounded-lg border text-[11px] font-black shrink-0 ${theme.badge}`}>
+            {theme.title}
+          </span>
         </div>
 
-        {/* Mascota Interactiva y Guía de Fauna Chilena */}
-        <InteractiveFaunaCompanion
-          species={guideSpecies}
-          subjectName={currentUnitDef.nombre}
-          onOpenAlbum={handleOpenAlbum}
-        />
-
-        {/* Text Area (Editing vs Book-like Reading View) */}
-        {showTextEditor ? (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="font-semibold text-stone-600">
-                Edita o pega un texto oficial para evaluar en {currentUnitDef.numero}:
-              </span>
-              <label className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold cursor-pointer text-xs">
-                <Upload className="w-3.5 h-3.5 text-stone-500" />
-                <span>Cargar .txt</span>
-                <input type="file" accept=".txt" className="hidden" onChange={handleFileUpload} />
-              </label>
-            </div>
-            <textarea
-              value={inputText}
-              onChange={(e) => onChangeInputText(e.target.value)}
-              rows={5}
-              className="w-full p-4 rounded-2xl border border-stone-300 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all resize-y text-stone-800 font-serif leading-relaxed"
-              placeholder="Pega aquí el texto que deseas evaluar..."
-            />
-            <div className="flex justify-between items-center text-xs text-stone-500">
-              <span>Palabras: {inputText.trim() ? inputText.trim().split(/\s+/).length : 0}</span>
-              {currentSample && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChangeInputText(currentSample.text);
-                    setShowTextEditor(false);
-                  }}
-                  className="text-amber-700 hover:underline font-semibold cursor-pointer"
-                >
-                  Restaurar lectura oficial de esta unidad
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div
-            ref={textContainerRef}
-            onMouseMove={handleMouseMoveText}
-            onMouseLeave={handleMouseLeaveText}
-            className={`relative p-5 sm:p-7 rounded-2xl border transition-all select-text leading-relaxed ${
-              duaSettings.sensoryMode === 'calm'
-                ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
-                : theme.lightBg + ' border-stone-200 text-stone-800'
-            }`}
-          >
-            {/* Reading Ruler Visual Follower */}
-            {duaSettings.readingRuler && isRulerVisible && (
-              <div
-                className="absolute left-0 right-0 pointer-events-none transition-transform duration-75 z-10"
-                style={{ top: `${rulerTop}px` }}
-              >
-                <div className="h-9 bg-amber-400/25 border-y-2 border-amber-500/70 shadow-2xs flex items-center justify-between px-3">
-                  <span className="text-[10px] font-bold text-stone-900 bg-white/90 px-2 py-0.5 rounded shadow-2xs">
-                    Línea activa de lectura
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {isIngles ? (
-              <div className="space-y-4">
-                {/* Selector de actividad en inglés para Modo Temprano */}
-                {isEarlyLearningMode && (
-                  <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-indigo-100">
-                    <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
-                      <span>🌟 Actividad de inglés ({selectedNivel}):</span>
-                    </span>
-                    <div className="inline-flex p-1 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-bold">
-                      <button
-                        type="button"
-                        id="btn-english-tab-game"
-                        onClick={() => setEnglishTab('game')}
-                        className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-                          englishTab === 'game'
-                            ? 'bg-indigo-600 text-white shadow-2xs'
-                            : 'text-indigo-800 hover:bg-indigo-100/60'
-                        }`}
-                      >
-                        <span>🎮 Unir con el Dedito</span>
-                      </button>
-                      <button
-                        type="button"
-                        id="btn-english-tab-sentences"
-                        onClick={() => setEnglishTab('sentences')}
-                        className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-                          englishTab === 'sentences'
-                            ? 'bg-indigo-600 text-white shadow-2xs'
-                            : 'text-indigo-800 hover:bg-indigo-100/60'
-                        }`}
-                      >
-                        <span>📖 Oraciones Cortas</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {isEarlyLearningMode && englishTab === 'game' ? (
-                  <EnglishWordMatchGame
-                    nivel={selectedNivel}
-                    unidadNombre={currentUnitDef.nombre}
-                    onOpenAlbum={handleOpenAlbum}
-                  />
-                ) : (
-                  <div className={`${textSizeClass} space-y-4`}>
-                    {getBilingualLinesForText(inputText).map((item, idx) => {
-                      const isEnFirst = englishLangOrder === 'en-first';
-                      const topText = isEnFirst ? item.en : (item.es || item.en);
-                      const bottomText = isEnFirst ? item.es : item.en;
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`group py-2 px-3 rounded-xl border border-transparent hover:border-indigo-200 hover:bg-white/60 transition-all ${
-                            isEarlyLearningMode
-                              ? 'bg-white/50 border-stone-200/60 my-2 shadow-2xs'
-                              : 'border-b border-stone-100/80 last:border-0'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 space-y-1">
-                              {/* Línea principal */}
-                              <p className="font-semibold text-stone-900 leading-snug text-base sm:text-lg">
-                                {duaSettings.syllableMode ? formatTextWithSyllables(topText) : topText}
-                              </p>
-
-                              {/* Traducción directa en la siguiente línea */}
-                              {showEnglishTranslation && bottomText && (
-                                <p className="text-stone-500 font-normal text-sm sm:text-base leading-snug">
-                                  {duaSettings.syllableMode ? formatTextWithSyllables(bottomText) : bottomText}
-                                </p>
-                              )}
-                            </div>
-
-                            {/* Botón sutil para escuchar pronunciación en inglés */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                speechReader.stop();
-                                speechReader.speak(item.en, { lang: 'en-US', rate: 0.8 });
-                              }}
-                              className="p-2 rounded-xl text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer shrink-0"
-                              title={`Escuchar "${item.en}"`}
-                            >
-                              <Volume2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : isEarlyLearningMode ? (
-              <div className="space-y-3">
-                {displayedReadingText
-                  .split(/(?<=[.!?])\s+|\n+/)
-                  .filter((s) => s.trim().length > 0)
-                  .map((sentence, idx) => {
-                    const sentenceEmojis = [
-                      '🌱',
-                      '☀️',
-                      '🎒',
-                      '🏫',
-                      '🍎',
-                      '🐶',
-                      '🎨',
-                      '⭐',
-                      '🎈',
-                      '🦉',
-                      '✨',
-                      '🐾',
-                    ];
-                    const emoji = sentenceEmojis[idx % sentenceEmojis.length];
-                    return (
-                      <div
-                        key={idx}
-                        className="p-3.5 sm:p-4 rounded-2xl bg-white border border-stone-200 hover:border-amber-300 transition-all flex items-start justify-between gap-3 shadow-2xs"
-                      >
-                        <div className="flex items-start gap-3 flex-1">
-                          <span
-                            className="text-xl sm:text-2xl shrink-0 select-none"
-                            role="img"
-                            aria-hidden="true"
-                          >
-                            {emoji}
-                          </span>
-                          <p className="text-base sm:text-lg font-medium text-stone-900 leading-relaxed pt-0.5">
-                            {sentence.trim()}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            speechReader.stop();
-                            speechReader.speak(sentence.trim(), {
-                              rate: duaSettings.speechSpeed === 'slow' ? 0.8 : 1.0,
-                            });
-                          }}
-                          className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer shrink-0"
-                          title="Escuchar esta oración con voz clara"
-                        >
-                          <Volume2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-              </div>
-            ) : (
-              <div className={`${textSizeClass} space-y-3 whitespace-pre-line`}>
-                {displayedReadingText}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Calculadora Escolar Quick Launcher for Matemática (1° a 4° Básico) */}
-      {isMatematica && (
-        <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/5 border border-emerald-300/80 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-3.5 text-center sm:text-left">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-2xl shadow-xs shrink-0">
-              🧮
-            </div>
-            <div>
-              <div className="flex items-center gap-2 justify-center sm:justify-start">
-                <span className="text-base font-black text-stone-900">
-                  Calculadora Escolar Explicada
-                </span>
-                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                  {selectedNivel}
-                </span>
-              </div>
-              <p className="text-xs text-stone-600 mt-0.5">
-                Realiza sumas, restas, multiplicaciones y divisiones con explicación paso a paso, grupos pictóricos y voz.
-              </p>
-            </div>
-          </div>
-
+        {/* Child-Friendly Adventure Trail (Caminito de Huellitas) */}
+        <div className="flex items-center gap-1 bg-amber-50/80 px-2 py-0.5 rounded-xl border border-amber-200 text-xs font-black shrink-0">
+          {/* Step 1: Cuento */}
           <button
             type="button"
-            id="btn-open-calculadora-banner"
-            onClick={() => setShowCalculadora(true)}
-            className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black inline-flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+            onClick={() => {
+              soundFx.playPop();
+              speechReader.stop();
+              setCurrentStep(0);
+            }}
+            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+              currentStep === 0
+                ? 'bg-amber-500 text-white shadow-2xs scale-105'
+                : 'text-stone-600 hover:text-amber-800'
+            }`}
           >
-            <span>Abrir Calculadora</span>
-            <span>→</span>
+            <span>📖 Cuento</span>
+          </button>
+
+          <span className="text-amber-300 text-[10px] select-none">🐾</span>
+
+          {/* Step 2: Desafíos */}
+          <button
+            type="button"
+            onClick={() => {
+              soundFx.playPop();
+              speechReader.stop();
+              setCurrentStep(1);
+            }}
+            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+              currentStep >= 1 && currentStep <= totalQuestions
+                ? 'bg-amber-500 text-white shadow-2xs scale-105'
+                : 'text-stone-600 hover:text-amber-800'
+            }`}
+          >
+            <span>🎯 Trivia</span>
+          </button>
+
+          <span className="text-amber-300 text-[10px] select-none">🐾</span>
+
+          {/* Step 3: Recompensas */}
+          <button
+            type="button"
+            onClick={() => {
+              soundFx.playPop();
+              speechReader.stop();
+              setCurrentStep(totalQuestions + 1);
+            }}
+            className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
+              currentStep > totalQuestions
+                ? 'bg-emerald-600 text-white shadow-2xs scale-105'
+                : 'text-stone-600 hover:text-emerald-800'
+            }`}
+          >
+            <span>🏆 Premio</span>
           </button>
         </div>
-      )}
 
-      {/* Concrete Manipulatives Widget for Matemática 1° Básico */}
-      {isMatematica && selectedNivel === '1° Básico' && (
-        <MatematicaConcretaWidget soundEnabled={soundEnabled} />
-      )}
+        {/* Quick HUD Tool Buttons */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Audio Toggle */}
+          <button
+            type="button"
+            id="btn-voice-reading-hud"
+            onClick={handleTogglePlayReading}
+            className={`px-2 py-1 rounded-xl text-xs font-black inline-flex items-center gap-1 transition-all cursor-pointer ${
+              isSpeakingReading
+                ? 'bg-red-600 text-white animate-pulse'
+                : 'bg-stone-100 hover:bg-stone-200 text-stone-800'
+            }`}
+            title="Escuchar con voz"
+          >
+            <Volume2 className="w-3.5 h-3.5 text-amber-600" />
+            <span className="hidden md:inline">Voz</span>
+          </button>
 
-      {/* Clean Interactive Challenge Section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-black uppercase tracking-wider text-stone-400">
-              Desafío de Comprensión
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
+          {/* Calculadora (Math only) */}
+          {isMatematica && (
             <button
               type="button"
-              id="btn-open-worksheet-course"
-              onClick={onOpenWorksheet}
-              className="px-3 py-1.5 rounded-xl bg-white border border-stone-200 hover:border-amber-400 text-xs font-bold text-stone-700 inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-              title="Ver e imprimir guía para el cuaderno"
+              id="btn-open-calculadora-hud"
+              onClick={() => {
+                soundFx.playBoing();
+                setShowCalculadora(true);
+              }}
+              className="px-2 py-1 rounded-xl text-xs font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 inline-flex items-center gap-1 cursor-pointer active:scale-95"
             >
-              <Printer className="w-3.5 h-3.5 text-stone-500" />
-              <span>Imprimir Guía</span>
+              <span>🧮</span>
             </button>
+          )}
 
-            {/* Switch between Quiz and JSON */}
-            <div className="inline-flex p-0.5 rounded-xl bg-stone-100 border border-stone-200 text-xs font-bold">
+          {/* Álbum de Láminas */}
+          <button
+            type="button"
+            id="btn-open-album-hud"
+            onClick={handleOpenAlbum}
+            className="px-2 py-1 rounded-xl text-xs font-black bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 inline-flex items-center gap-1 cursor-pointer active:scale-95"
+          >
+            <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-600" />
+            <span className="hidden sm:inline">({unlockedLaminas.length})</span>
+          </button>
+
+          {/* Teacher & DUA Settings */}
+          <button
+            type="button"
+            id="btn-open-tools-hud"
+            onClick={() => {
+              soundFx.playPop();
+              setShowDocenteModal(true);
+            }}
+            className="p-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold inline-flex items-center cursor-pointer"
+            title="Ajustes DUA y profesor"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </header>
+
+      {/* 2. Main Game Console Screen (No Page Scroll, Carousel / Step Experience) */}
+      <main className="flex-1 min-h-0 flex flex-col justify-center overflow-hidden py-0.5">
+        {activeTab === 'json' ? (
+          <div className="h-full overflow-y-auto bg-stone-900 rounded-3xl p-4 text-white">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-bold text-amber-400">JSON Curricular</span>
               <button
                 type="button"
                 onClick={() => setActiveTab('quiz')}
-                className={`px-3 py-1 rounded-lg flex items-center gap-1 transition-all cursor-pointer ${
-                  activeTab === 'quiz' ? 'bg-white text-stone-900 shadow-2xs' : 'text-stone-500'
-                }`}
+                className="text-xs bg-amber-500 px-3 py-1 rounded-xl text-white font-bold"
               >
-                <Gamepad2 className="w-3 h-3 text-stone-600" />
-                <span>Trivia</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('json')}
-                className={`px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all cursor-pointer ${
-                  activeTab === 'json' ? 'bg-stone-900 text-white shadow-2xs' : 'text-stone-500'
-                }`}
-              >
-                <Code2 className="w-3 h-3 text-amber-400" />
-                <span>JSON</span>
+                Volver
               </button>
             </div>
+            <JsonExportView
+              quizData={quizData}
+              rawJson={rawJson}
+              onPrintWorksheet={onOpenWorksheet}
+            />
           </div>
-        </div>
-
-        {activeTab === 'quiz' ? (
-          <InteractiveQuiz
-            quizData={quizData}
-            soundEnabled={soundEnabled}
-            settings={{ ...duaSettings, earlyLearningMode: isEarlyLearningMode }}
-            onResetQuiz={() => {}}
-            onOpenAlbum={handleOpenAlbum}
-          />
+        ) : currentStep === 0 ? (
+          /* =========================================================================
+             PANTALLA 1: Cuento Interactivo en Diapositivas (Story Cards Carousel)
+             ========================================================================= */
+          <div className="w-full flex-1 flex flex-col justify-center">
+            {isIngles && isEarlyLearningMode ? (
+              <div className="bg-white rounded-3xl border-4 border-indigo-200 p-4 sm:p-6 shadow-sm flex flex-col justify-between flex-1 animate-console-step">
+                <EnglishWordMatchGame
+                  nivel={selectedNivel}
+                  unidadNombre={currentUnitDef.nombre}
+                  onOpenAlbum={handleOpenAlbum}
+                />
+                <div className="pt-3 border-t border-stone-100 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundFx.playPop();
+                      setCurrentStep(1);
+                    }}
+                    className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm inline-flex items-center gap-2 shadow-md cursor-pointer active:scale-95"
+                  >
+                    <span>¡A Jugar la Trivia! 🚀</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <InteractiveReadingView
+                title={currentSample?.title || quizData.titulo_texto}
+                text={inputText}
+                genre={(currentSample as any)?.genero || (currentSample as any)?.genre || quizData.eje_tematico}
+                nivel={selectedNivel}
+                unidad={currentUnitDef.nombre}
+                settings={{ ...duaSettings, earlyLearningMode: isEarlyLearningMode }}
+                guideSpecies={guideSpecies}
+                onNext={() => {
+                  soundFx.playCelebration();
+                  speechReader.stop();
+                  setCurrentStep(1);
+                }}
+                nextButtonLabel="¡A Jugar la Trivia! 🚀"
+              />
+            )}
+          </div>
         ) : (
-          <JsonExportView
-            quizData={quizData}
-            rawJson={rawJson}
-            onPrintWorksheet={onOpenWorksheet}
-          />
+          /* =========================================================================
+             PANTALLAS INTERMEDIAS (Trivia 1 pregunta por pantalla) + PANTALLA FINAL
+             ========================================================================= */
+          <div className="w-full flex-1 flex flex-col justify-center">
+            <InteractiveQuiz
+              quizData={quizData}
+              soundEnabled={soundEnabled}
+              settings={{ ...duaSettings, earlyLearningMode: isEarlyLearningMode }}
+              currentStep={currentStep}
+              onStepChange={setCurrentStep}
+              onBackToIntro={() => {
+                soundFx.playPop();
+                speechReader.stop();
+                setCurrentStep(0);
+              }}
+              guideSpecies={guideSpecies}
+              readingText={inputText}
+              readingTitle={currentSample?.title || quizData.titulo_texto}
+              onOpenAlbum={handleOpenAlbum}
+              onOpenWorksheet={onOpenWorksheet}
+            />
+          </div>
         )}
-      </div>
+      </main>
 
-      {/* Modal Calculadora Escolar Explicada */}
+      {/* Modals (Calculadora, Fauna, Álbum, Docente) */}
       <CalculadoraEscolar
         isOpen={showCalculadora}
         onClose={() => setShowCalculadora(false)}
@@ -998,7 +446,6 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
         selectedNivel={selectedNivel}
       />
 
-      {/* Modal interactivo de Fauna Guía de Chile */}
       <FaunaGuiaModal
         isOpen={showFaunaModal}
         onClose={() => setShowFaunaModal(false)}
@@ -1006,14 +453,12 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
         initialSpecies={guideSpecies}
       />
 
-      {/* Modal Álbum de Láminas Coleccionables del Explorador */}
       <AlbumLaminasModal
         isOpen={showAlbumModal}
         onClose={() => setShowAlbumModal(false)}
         unlockedIds={unlockedLaminas}
       />
 
-      {/* Modal Rincón Docente y Ajustes */}
       <DocentePanelModal
         isOpen={showDocenteModal}
         onClose={() => setShowDocenteModal(false)}
@@ -1027,7 +472,10 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
         onGenerateQuestions={onGenerateQuestions}
         isLoading={isLoading}
         onOpenWorksheet={onOpenWorksheet}
-        onViewJson={() => setActiveTab('json')}
+        onViewJson={() => {
+          setShowDocenteModal(false);
+          setActiveTab('json');
+        }}
       />
     </div>
   );

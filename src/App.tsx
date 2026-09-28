@@ -462,26 +462,38 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col font-sans transition-colors w-full overflow-x-hidden ${
+      className={`${
+        currentScreen === 'course'
+          ? 'h-[100dvh] max-h-[100dvh] flex flex-col overflow-hidden'
+          : 'min-h-screen flex flex-col w-full overflow-x-hidden'
+      } font-sans transition-colors ${
         duaSettings.sensoryMode === 'calm'
           ? 'bg-emerald-50/40 text-emerald-950 selection:bg-emerald-200'
           : 'bg-[#fafaf8] text-stone-800 selection:bg-amber-200'
       }`}
     >
-      {/* App Header (Clean & Minimalist) */}
-      <Header
-        soundEnabled={soundEnabled}
-        onToggleSound={() => setSoundEnabled((prev) => !prev)}
-        onOpenSettings={() => setShowSettingsModal(true)}
-        onGoHome={handleGoHome}
-        onOpenOralLab={() => handleOpenOralLab()}
-        onOpenSoundscapes={() => setShowSoundscapesModal(true)}
-        soundscapePlaying={soundscapePlaying}
-        currentScreen={currentScreen}
-      />
+      {/* App Header (Clean & Minimalist - Hidden on mobile during course game console) */}
+      <div className={currentScreen === 'course' ? 'hidden sm:block' : 'block'}>
+        <Header
+          soundEnabled={soundEnabled}
+          onToggleSound={() => setSoundEnabled((prev) => !prev)}
+          onOpenSettings={() => setShowSettingsModal(true)}
+          onGoHome={handleGoHome}
+          onOpenOralLab={() => handleOpenOralLab()}
+          onOpenSoundscapes={() => setShowSoundscapesModal(true)}
+          soundscapePlaying={soundscapePlaying}
+          currentScreen={currentScreen}
+        />
+      </div>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-6 pb-24 sm:pb-8">
+      <main
+        className={
+          currentScreen === 'course'
+            ? 'flex-1 min-h-0 w-full max-w-5xl mx-auto px-2 sm:px-4 py-1 flex flex-col overflow-hidden'
+            : 'flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-6 pb-24 sm:pb-8'
+        }
+      >
         {/* Error notification banner */}
         {error && (
           <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm shadow-xs">
@@ -580,11 +592,13 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-stone-200 bg-white/70 py-4 text-center text-xs text-stone-600">
-        <p>
-          Profesor Experto en Currículum Nacional Mineduc de Chile • Lenguaje, Matemática, Historia, Ciencias e Inglés (1° a 4° Básico) • DUA / PIE
-        </p>
-      </footer>
+      {currentScreen !== 'course' && (
+        <footer className="border-t border-stone-200 bg-white/70 py-4 text-center text-xs text-stone-600">
+          <p>
+            Profesor Experto en Currículum Nacional Mineduc de Chile • Lenguaje, Matemática, Historia, Ciencias e Inglés (1° a 4° Básico) • DUA / PIE
+          </p>
+        </footer>
+      )}
 
       {/* Print Worksheet Modal */}
       {showWorksheet && (
@@ -632,16 +646,18 @@ export default function App() {
       />
 
       {/* Mobile Bottom Navigation Bar (Persistent and Touch-Friendly) */}
-      <BottomNav
-        currentScreen={currentScreen}
-        onGoHome={handleGoHome}
-        onOpenOralLab={() => handleOpenOralLab()}
-        onOpenAlbum={() => {
-          setUnlockedLaminas(getUnlockedLaminas());
-          setShowAlbumModal(true);
-        }}
-        onOpenSettings={() => setShowSettingsModal(true)}
-      />
+      {currentScreen !== 'course' && (
+        <BottomNav
+          currentScreen={currentScreen}
+          onGoHome={handleGoHome}
+          onOpenOralLab={() => handleOpenOralLab()}
+          onOpenAlbum={() => {
+            setUnlockedLaminas(getUnlockedLaminas());
+            setShowAlbumModal(true);
+          }}
+          onOpenSettings={() => setShowSettingsModal(true)}
+        />
+      )}
     </div>
   );
 }

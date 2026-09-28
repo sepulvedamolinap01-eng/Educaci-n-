@@ -7,10 +7,15 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowLeft,
+  ArrowRight,
   Star,
   Keyboard,
   Sparkles,
   BookOpen,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { FaunaAvatar, FaunaSpecies, FaunaMood } from './FaunaAvatars';
 import {
@@ -79,6 +84,7 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
   const [isSpeakingModel, setIsSpeakingModel] = useState<boolean>(false);
   const [spokenTranscript, setSpokenTranscript] = useState<string>('');
   const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
+  const [micErrorMessage, setMicErrorMessage] = useState<string | null>(null);
 
   const [wordEvaluation, setWordEvaluation] = useState<SpeechEvaluationResult | null>(null);
   const [paragraphEvaluation, setParagraphEvaluation] = useState<ParagraphEvaluationResult | null>(null);
@@ -88,8 +94,10 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
 
   const recognitionRef = useRef<any>(null);
   const silenceTimeoutRef = useRef<any>(null);
+  const maxDurationTimeoutRef = useRef<any>(null);
   const timerIntervalRef = useRef<any>(null);
-  const isStoppingRef = useRef<boolean>(false);
+  const latestTranscriptRef = useRef<string>('');
+  const hasEvaluatedRef = useRef<boolean>(false);
 
   const currentCompanion = FAUNA_COMPANIONS[selectedSpecies] || FAUNA_COMPANIONS.pudu;
 
@@ -116,20 +124,101 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
     return currentCompanion.mensajeBienvenida[selectedNivel];
   }, [currentCompanion, selectedNivel]);
 
+  // Generate child-friendly simulated options for fast 1-tap testing & voice practice
+  const simulatedOptions = useMemo(() => {
+    const text = (currentExercise.texto || '').trim();
+    if (currentExercise.tipo === 'parrafo') {
+      return {
+        correct: text,
+        close: text.slice(0, Math.max(10, Math.floor(text.length * 0.75))),
+        wrong: 'Había una vez en otro lugar lejano...',
+      };
+    }
+    if (currentExercise.tipo === 'frase') {
+      const words = text.split(' ');
+      const close = words.length > 2 ? words.slice(0, -1).join(' ') + ' ...' : text + ' casi';
+      return {
+        correct: text,
+        close: close,
+        wrong: 'El gato duerme tranquilo',
+      };
+    }
+    // palabra
+    let close = text.replace(/r/gi, 'l').replace(/s/gi, 'x');
+    if (close.toLowerCase() === text.toLowerCase()) {
+      close = text.slice(0, -1) + 'a';
+    }
+    const wrong = text.toLowerCase() === 'sol' ? 'Luna' : 'Pez';
+    return {
+      correct: text,
+      close: close,
+      wrong: wrong,
+    };
+  }, [currentExercise]);
+
+  // Stop listening safely and optionally trigger evaluation
+  const stopListeningAndEvaluate = (skipEvaluation = false) => {
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+    if (maxDurationTimeoutRef.current) {
+      clearTimeout(maxDurationTimeoutRef.current);
+      maxDurationTimeoutRef.current = null;
+    }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // Safe ignore
+      }
+    }
+    setIsListening(false);
+
+    if (!skipEvaluation && !hasEvaluatedRef.current) {
+      hasEvaluatedRef.current = true;
+      const textToEvaluate = latestTranscriptRef.current;
+      processEvaluation(textToEvaluate);
+    }
+  };
+
   // Reset states when changing animal or level
   useEffect(() => {
     speechReader.stop();
-    stopListening();
+    stopListeningAndEvaluate(true);
     setSpokenTranscript('');
     setWordEvaluation(null);
     setParagraphEvaluation(null);
+    setMicErrorMessage(null);
     setIsSpeakingModel(false);
     setCurrentIndex(0);
     setAnimalMood('idle');
   }, [selectedSpecies, selectedNivel]);
 
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      speechReader.stop();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      if (maxDurationTimeoutRef.current) clearTimeout(maxDurationTimeoutRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
+  }, []);
+
   const handlePlayModelAudio = () => {
-    if (isListening) stopListening();
+    if (isListening) stopListeningAndEvaluate(true);
 
     if (isSpeakingModel) {
       speechReader.stop();
@@ -159,33 +248,14 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
     });
   };
 
-  const stopListening = () => {
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
-      silenceTimeoutRef.current = null;
-    }
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
-    }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // Safe ignore
-      }
-    }
-    setIsListening(false);
-    isStoppingRef.current = true;
-  };
-
   const handleToggleListening = () => {
     speechReader.stop();
     setIsSpeakingModel(false);
 
+    // If currently listening, clicking the button immediately stops and evaluates!
     if (isListening) {
-      stopListening();
       if (soundEnabled) soundFx.playPop();
+      stopListeningAndEvaluate(false);
       return;
     }
 
@@ -193,6 +263,9 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
+      setMicErrorMessage(
+        'Tu navegador no tiene activo el reconocimiento por voz web directo. ¡No te preocupes! Puedes escribir tu respuesta abajo para evaluarla y ganar tus estrellas ⭐'
+      );
       setShowManualInput(true);
       setAnimalMood('thinking');
       return;
@@ -202,117 +275,196 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
       const recognition = new SpeechRecognition();
       const isEnglish = selectedSpecies === 'rana';
       recognition.lang = isEnglish ? 'en-US' : 'es-CL';
-      recognition.continuous = selectedNivel === '3° Básico' || selectedNivel === '4° Básico';
+      recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.maxAlternatives = 2;
+      recognition.maxAlternatives = 3;
 
-      isStoppingRef.current = false;
+      latestTranscriptRef.current = '';
+      hasEvaluatedRef.current = false;
       setSpokenTranscript('');
       setWordEvaluation(null);
       setParagraphEvaluation(null);
+      setMicErrorMessage(null);
       setRecordingSeconds(0);
 
+      // Timer counter
       timerIntervalRef.current = setInterval(() => {
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
 
-      const resetSilenceTimer = (currentTranscript: string) => {
+      // Max recording duration safeguard
+      const maxSeconds = currentExercise.tipo === 'parrafo' ? 25000 : 12000;
+      maxDurationTimeoutRef.current = setTimeout(() => {
+        stopListeningAndEvaluate(false);
+      }, maxSeconds);
+
+      const resetSilenceTimer = () => {
         if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+        const delay = currentExercise.tipo === 'parrafo' ? 5000 : 3500;
         silenceTimeoutRef.current = setTimeout(() => {
-          if (!isStoppingRef.current) {
-            stopListening();
-            if (currentTranscript.trim()) {
-              processEvaluation(currentTranscript);
-            }
-          }
-        }, 3000);
+          stopListeningAndEvaluate(false);
+        }, delay);
       };
 
       recognition.onstart = () => {
         setIsListening(true);
         setAnimalMood('listening');
         if (soundEnabled) soundFx.playPop();
-
-        silenceTimeoutRef.current = setTimeout(() => {
-          if (!isStoppingRef.current) {
-            stopListening();
-            setAnimalMood('thinking');
-          }
-        }, 8000);
       };
 
       recognition.onresult = (event: any) => {
-        let fullTranscript = '';
+        let interimText = '';
+        let finalText = '';
+
         for (let i = 0; i < event.results.length; i++) {
-          fullTranscript += event.results[i][0].transcript + ' ';
+          const res = event.results[i];
+          const chunk = res[0]?.transcript || '';
+          if (res.isFinal) {
+            finalText += chunk + ' ';
+          } else {
+            interimText += chunk + ' ';
+          }
         }
-        fullTranscript = fullTranscript.trim();
-        setSpokenTranscript(fullTranscript);
-        resetSilenceTimer(fullTranscript);
+
+        const combined = (finalText + interimText).trim();
+        if (combined) {
+          latestTranscriptRef.current = combined;
+          setSpokenTranscript(combined);
+        }
+
+        // For single word exercises (like "Ostra"), when spoken, allow a natural pause before evaluation
+        if (currentExercise.tipo === 'palabra' && combined) {
+          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+          silenceTimeoutRef.current = setTimeout(() => {
+            stopListeningAndEvaluate(false);
+          }, 2000);
+        } else {
+          resetSilenceTimer();
+        }
       };
 
       recognition.onerror = (event: any) => {
-        stopListening();
-        if (event.error === 'no-speech') {
-          setAnimalMood('thinking');
-        } else {
+        const error = event.error;
+        if (error === 'not-allowed' || error === 'service-not-allowed') {
+          stopListeningAndEvaluate(true);
+          setMicErrorMessage(
+            'El micrófono está bloqueado o requiere permisos en tu navegador. Puedes habilitarlo haciendo clic en el ícono del candado o la cámara en la barra de direcciones, o probar escribiendo abajo.'
+          );
           setShowManualInput(true);
           setAnimalMood('thinking');
+          if (soundEnabled) soundFx.playTryAgain();
+        } else if (error === 'no-speech') {
+          stopListeningAndEvaluate(false);
+        } else {
+          stopListeningAndEvaluate(false);
         }
       };
 
       recognition.onend = () => {
-        stopListening();
+        stopListeningAndEvaluate(false);
       };
 
       recognitionRef.current = recognition;
       recognition.start();
     } catch {
-      stopListening();
+      stopListeningAndEvaluate(true);
+      setMicErrorMessage(
+        'No se pudo activar el micrófono. Puedes utilizar la prueba escrita por teclado para evaluar la pronunciación y ganar estrellas ⭐'
+      );
       setShowManualInput(true);
     }
   };
 
   const processEvaluation = (transcript: string) => {
+    const cleanTranscript = (transcript || '').trim();
+    setSpokenTranscript(cleanTranscript);
+
     if (currentExercise.tipo === 'parrafo') {
-      const result = evaluateParagraphReading(transcript, currentExercise.texto);
+      const result = evaluateParagraphReading(cleanTranscript, currentExercise.texto);
       setParagraphEvaluation(result);
-      if (result.scorePercent >= 60) {
+      setWordEvaluation(null);
+
+      if (result.status === 'correct') {
         setAnimalMood('celebrating');
         setStars((prev) => prev + 2);
-        if (soundEnabled) soundFx.playCorrect();
-        confetti({ particleCount: 45, spread: 65, origin: { y: 0.65 } });
+        if (soundEnabled) {
+          soundFx.playCelebration();
+          soundFx.playCorrect();
+        }
+        confetti({ particleCount: 75, spread: 80, origin: { y: 0.65 } });
+        speechReader.speak(`¡Excelente lectura! Lograste el ${result.scorePercent} por ciento de precisión.`);
+      } else if (result.status === 'close') {
+        setAnimalMood('thinking');
+        if (soundEnabled) soundFx.playTryAgain();
+        speechReader.speak(`¡Buen esfuerzo! Lograste el ${result.scorePercent} por ciento. Inténtalo de nuevo.`);
+      } else if (result.status === 'silence') {
+        setAnimalMood('thinking');
+        if (soundEnabled) soundFx.playTryAgain();
+        speechReader.speak('No logramos escuchar tu voz. Acércate al micrófono y lee en voz alta.');
       } else {
         setAnimalMood('thinking');
         if (soundEnabled) soundFx.playIncorrect();
+        speechReader.speak('Escucha el audio modelo y vuelve a leerlo con calma.');
       }
     } else {
-      const result = evaluateOralPronunciation(transcript, currentExercise.texto);
+      const result = evaluateOralPronunciation(
+        cleanTranscript,
+        currentExercise.texto,
+        currentExercise.pista
+      );
       setWordEvaluation(result);
+      setParagraphEvaluation(null);
+
       if (result.status === 'correct') {
         setAnimalMood('celebrating');
         setStars((prev) => prev + 1);
-        if (soundEnabled) soundFx.playCorrect();
-        confetti({ particleCount: 35, spread: 55, origin: { y: 0.7 } });
+        if (soundEnabled) {
+          soundFx.playCelebration();
+          soundFx.playCorrect();
+        }
+        confetti({ particleCount: 60, spread: 70, origin: { y: 0.65 } });
+        speechReader.speak(`¡Muy bien! Pronunciaste excelente ${currentExercise.texto}.`);
+      } else if (result.status === 'close') {
+        setAnimalMood('thinking');
+        if (soundEnabled) soundFx.playTryAgain();
+        speechReader.speak(`¡Casi! Dijiste ${result.bestMatchWord || cleanTranscript}. La palabra es ${currentExercise.texto}.`);
+      } else if (result.status === 'silence') {
+        setAnimalMood('thinking');
+        if (soundEnabled) soundFx.playTryAgain();
+        speechReader.speak(`No alcanzamos a escuchar tu voz. Acércate al micrófono y di ${currentExercise.texto}.`);
       } else {
         setAnimalMood('thinking');
         if (soundEnabled) soundFx.playIncorrect();
+        speechReader.speak(`Escuchamos ${cleanTranscript || 'otra palabra'}, pero la palabra correcta es ${currentExercise.texto}. ¡Escucha cómo suena e inténtalo otra vez!`);
       }
     }
+  };
+
+  const handleSimulatedPronunciation = (simulatedText: string) => {
+    speechReader.stop();
+    stopListeningAndEvaluate(true);
+    setMicErrorMessage(null);
+    latestTranscriptRef.current = simulatedText;
+    hasEvaluatedRef.current = true;
+    processEvaluation(simulatedText);
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualText.trim()) return;
-    setSpokenTranscript(manualText);
-    processEvaluation(manualText);
+    stopListeningAndEvaluate(true);
+    latestTranscriptRef.current = manualText.trim();
+    hasEvaluatedRef.current = true;
+    processEvaluation(manualText.trim());
   };
 
   const handleNextItem = () => {
     speechReader.stop();
+    stopListeningAndEvaluate(true);
     setSpokenTranscript('');
     setWordEvaluation(null);
     setParagraphEvaluation(null);
+    setMicErrorMessage(null);
     setManualText('');
     setAnimalMood('idle');
     setCurrentIndex((prev) => (prev + 1) % availableExercises.length);
@@ -320,9 +472,11 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
 
   const handlePrevItem = () => {
     speechReader.stop();
+    stopListeningAndEvaluate(true);
     setSpokenTranscript('');
     setWordEvaluation(null);
     setParagraphEvaluation(null);
+    setMicErrorMessage(null);
     setManualText('');
     setAnimalMood('idle');
     setCurrentIndex((prev) => (prev - 1 + availableExercises.length) % availableExercises.length);
@@ -588,8 +742,38 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
           </div>
         )}
 
+        {/* Live Audio Visualizer Banner when listening */}
+        {isListening && (
+          <div className="p-3.5 bg-rose-50 border-2 border-rose-300 rounded-2xl text-center space-y-2 animate-pulse shadow-xs">
+            <div className="flex items-center justify-center gap-2 text-rose-700 font-black text-xs sm:text-sm">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping inline-block" />
+              <span>🎙️ Grabando tu voz ({recordingSeconds}s)... Di en voz alta: «{currentExercise.texto}»</span>
+            </div>
+            {spokenTranscript ? (
+              <div className="text-xs font-bold text-rose-900 bg-white/90 py-1.5 px-3 rounded-xl inline-block border border-rose-200 shadow-2xs">
+                Escuchando: «{spokenTranscript}»
+              </div>
+            ) : (
+              <p className="text-[11px] text-rose-600 italic">
+                Habla cerca del micrófono. Evaluaremos tu pronunciación automáticamente.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Mic Error Banner if permissions are blocked */}
+        {micErrorMessage && (
+          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex items-start gap-2.5 text-left">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <p className="font-bold">Aviso del micrófono:</p>
+              <p className="opacity-90">{micErrorMessage}</p>
+            </div>
+          </div>
+        )}
+
         {/* Modern Action Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
           {/* 1. Listen model */}
           <button
             type="button"
@@ -612,14 +796,14 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
             disabled={isSpeakingModel}
             className={`py-3 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs ${
               isListening
-                ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse ring-4 ring-rose-100'
+                ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse ring-4 ring-rose-200 shadow-md'
                 : `${currentCompanion.colorTheme.primary} hover:opacity-95 text-white`
             }`}
           >
             {isListening ? (
               <>
                 <Square className="w-4 h-4 fill-current" />
-                <span>Escuchando... Toca para finalizar ({recordingSeconds}s)</span>
+                <span>Detener y Evaluar ({recordingSeconds}s)</span>
               </>
             ) : (
               <>
@@ -630,35 +814,272 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
           </button>
         </div>
 
-        {/* Evaluation feedback card */}
+        {/* Interactive Simulated Pronunciation Chips (Guaranteed instant success & practice) */}
+        <div className="pt-2 pb-1 border-t border-stone-100 space-y-1.5 text-center">
+          <div className="flex items-center justify-center gap-1.5 text-stone-600 text-xs font-bold">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>O practica pronunciando con 1 toque táctil:</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              id="btn-oral-say-correct"
+              onClick={() => handleSimulatedPronunciation(simulatedOptions.correct)}
+              className="px-3.5 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-black text-xs border-2 border-emerald-400 shadow-2xs active:scale-95 cursor-pointer inline-flex items-center gap-1.5 transition-all"
+              title={`Decir correctamente: «${simulatedOptions.correct}»`}
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Decir «{simulatedOptions.correct}» ⭐</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-oral-say-close"
+              onClick={() => handleSimulatedPronunciation(simulatedOptions.close)}
+              className="px-3 py-2 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-950 font-bold text-xs border border-amber-300 shadow-2xs active:scale-95 cursor-pointer inline-flex items-center gap-1.5 transition-all"
+              title={`Probar pronunciación aproximada: «${simulatedOptions.close}»`}
+            >
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <span>Probar «{simulatedOptions.close}»</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-oral-say-wrong"
+              onClick={() => handleSimulatedPronunciation(simulatedOptions.wrong)}
+              className="px-3 py-2 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-950 font-bold text-xs border border-rose-300 shadow-2xs active:scale-95 cursor-pointer inline-flex items-center gap-1.5 transition-all"
+              title={`Probar palabra diferente: «${simulatedOptions.wrong}»`}
+            >
+              <XCircle className="w-4 h-4 text-rose-600" />
+              <span>Probar «{simulatedOptions.wrong}»</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Word Evaluation feedback card */}
         {wordEvaluation && (
           <div
-            className={`p-4 rounded-2xl border text-left space-y-1 transition-all ${
+            className={`p-4 sm:p-5 rounded-2xl border text-left space-y-3 transition-all animate-in zoom-in-95 duration-200 shadow-xs ${
               wordEvaluation.status === 'correct'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
-                : 'bg-amber-50 border-amber-200 text-amber-950'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-950 ring-2 ring-emerald-200'
+                : wordEvaluation.status === 'close'
+                ? 'bg-amber-50 border-amber-300 text-amber-950'
+                : wordEvaluation.status === 'silence'
+                ? 'bg-sky-50 border-sky-300 text-sky-950'
+                : 'bg-rose-50 border-rose-300 text-rose-950'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="font-black text-xs sm:text-sm flex items-center gap-1.5">
-                {wordEvaluation.status === 'correct' ? '🎉 ¡Muy bien pronunciado!' : '💡 Consejo del animal'}
-              </span>
-              <span className="text-[11px] font-medium opacity-80">
-                Dijiste: «{spokenTranscript || wordEvaluation.transcript}»
-              </span>
+            {/* Header with status badge */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 font-black text-sm sm:text-base">
+                {wordEvaluation.status === 'correct' && (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span className="text-emerald-800">🎉 ¡Muy bien pronunciado! (+1 ⭐)</span>
+                  </>
+                )}
+                {wordEvaluation.status === 'close' && (
+                  <>
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                    <span className="text-amber-800">⚠️ ¡Estuviste muy cerca!</span>
+                  </>
+                )}
+                {wordEvaluation.status === 'silence' && (
+                  <>
+                    <Mic className="w-5 h-5 text-sky-600" />
+                    <span className="text-sky-800">🎤 No alcanzamos a escuchar tu voz</span>
+                  </>
+                )}
+                {wordEvaluation.status === 'incorrect' && (
+                  <>
+                    <XCircle className="w-5 h-5 text-rose-600" />
+                    <span className="text-rose-800">❌ Vamos a corregir juntos</span>
+                  </>
+                )}
+              </div>
+
+              {(spokenTranscript || wordEvaluation.transcript) && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-white/80 border border-stone-200 text-stone-800">
+                  Dijiste: «{spokenTranscript || wordEvaluation.transcript}»
+                </span>
+              )}
             </div>
-            <p className="text-xs leading-relaxed opacity-90">{wordEvaluation.message}</p>
+
+            {/* Message & phonetic feedback */}
+            <div className="text-xs sm:text-sm leading-relaxed space-y-1.5">
+              <p className="font-medium">{wordEvaluation.message}</p>
+              {wordEvaluation.status !== 'correct' && currentExercise.pista && (
+                <p className="text-xs font-semibold opacity-90">
+                  💡 Pista de apoyo: {currentExercise.pista}
+                </p>
+              )}
+            </div>
+
+            {/* Quick Action buttons */}
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              {wordEvaluation.status === 'correct' ? (
+                <button
+                  type="button"
+                  onClick={handleNextItem}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <span>Siguiente desafío</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePlayModelAudio}
+                    className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-50 border border-stone-300 text-stone-800 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>Escuchar modelo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleListening}
+                    className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Intentar otra vez</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Fallback confirmation if mic had silence */}
+            {wordEvaluation.status === 'silence' && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  id="btn-confirm-word-fallback"
+                  onClick={() => handleSimulatedPronunciation(currentExercise.texto)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md inline-flex items-center justify-center gap-2 active:scale-95 cursor-pointer transition-all animate-bounce"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>¿Dijiste «{currentExercise.texto}»? ¡Toca aquí para ganar tu estrella! ⭐</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
+        {/* Paragraph Evaluation feedback card */}
         {paragraphEvaluation && (
-          <div className="p-4 rounded-2xl border bg-stone-50 border-stone-200 text-left space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-stone-900">
-                Resultado de lectura: {paragraphEvaluation.scorePercent}% de precisión
-              </span>
+          <div
+            className={`p-4 sm:p-5 rounded-2xl border text-left space-y-3 transition-all animate-in zoom-in-95 duration-200 shadow-xs ${
+              paragraphEvaluation.status === 'correct'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-950 ring-2 ring-emerald-200'
+                : paragraphEvaluation.status === 'close'
+                ? 'bg-amber-50 border-amber-300 text-amber-950'
+                : paragraphEvaluation.status === 'silence'
+                ? 'bg-sky-50 border-sky-300 text-sky-950'
+                : 'bg-rose-50 border-rose-300 text-rose-950'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2 font-black text-sm sm:text-base">
+                {paragraphEvaluation.status === 'correct' && (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span className="text-emerald-800">
+                      🎉 ¡Lectura fantástica! ({paragraphEvaluation.scorePercent}% de precisión)
+                    </span>
+                  </>
+                )}
+                {paragraphEvaluation.status === 'close' && (
+                  <>
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                    <span className="text-amber-800">
+                      ⚠️ ¡Buen esfuerzo! ({paragraphEvaluation.scorePercent}% de precisión)
+                    </span>
+                  </>
+                )}
+                {paragraphEvaluation.status === 'silence' && (
+                  <>
+                    <Mic className="w-5 h-5 text-sky-600" />
+                    <span className="text-sky-800">🎤 No alcanzamos a escuchar tu lectura</span>
+                  </>
+                )}
+                {paragraphEvaluation.status === 'incorrect' && (
+                  <>
+                    <XCircle className="w-5 h-5 text-rose-600" />
+                    <span className="text-rose-800">
+                      📖 Sigamos practicando ({paragraphEvaluation.scorePercent}% registrado)
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
-            <p className="text-xs text-stone-700">{paragraphEvaluation.message}</p>
+
+            <p className="text-xs sm:text-sm font-medium leading-relaxed">
+              {paragraphEvaluation.message}
+            </p>
+
+            {paragraphEvaluation.wordStatuses && paragraphEvaluation.wordStatuses.length > 0 && (
+              <div className="p-3 bg-white/80 rounded-xl border border-stone-200 flex flex-wrap gap-1.5 text-xs">
+                {paragraphEvaluation.wordStatuses.map((ws, i) => (
+                  <span
+                    key={i}
+                    className={`px-1.5 py-0.5 rounded font-medium ${
+                      ws.matched
+                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        : 'bg-rose-100 text-rose-800 line-through opacity-70'
+                    }`}
+                  >
+                    {ws.word}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              {paragraphEvaluation.status === 'correct' ? (
+                <button
+                  type="button"
+                  onClick={handleNextItem}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <span>Siguiente texto</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePlayModelAudio}
+                    className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-50 border border-stone-300 text-stone-800 font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>Escuchar modelo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleListening}
+                    className="px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Leer otra vez</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Fallback confirmation for paragraph if mic had silence */}
+            {paragraphEvaluation.status === 'silence' && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  id="btn-confirm-paragraph-fallback"
+                  onClick={() => handleSimulatedPronunciation(currentExercise.texto)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md inline-flex items-center justify-center gap-2 active:scale-95 cursor-pointer transition-all animate-bounce"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>¡Toca aquí si leíste el texto para registrar tu avance y estrellas! ⭐</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -668,19 +1089,19 @@ export const PuduOralLab: React.FC<PuduOralLabProps> = ({
         <button
           type="button"
           onClick={() => setShowManualInput((prev) => !prev)}
-          className="text-[11px] font-medium text-stone-400 hover:text-stone-700 inline-flex items-center gap-1 cursor-pointer transition-colors"
+          className="text-[11px] font-medium text-stone-500 hover:text-stone-800 inline-flex items-center gap-1 cursor-pointer transition-colors"
         >
           <Keyboard className="w-3.5 h-3.5" />
           <span>{showManualInput ? 'Cerrar prueba por teclado' : '¿Sin micrófono? Escribir por teclado'}</span>
         </button>
 
         {showManualInput && (
-          <form onSubmit={handleManualSubmit} className="mt-3 p-3 bg-white rounded-2xl border border-stone-200 text-left flex gap-2">
+          <form onSubmit={handleManualSubmit} className="mt-3 p-3 bg-white rounded-2xl border border-stone-200 text-left flex gap-2 shadow-2xs">
             <input
               type="text"
               value={manualText}
               onChange={(e) => setManualText(e.target.value)}
-              placeholder="Escribe aquí tu palabra o frase..."
+              placeholder={`Escribe aquí «${currentExercise.texto}» para probar...`}
               className="flex-1 px-3 py-2 text-xs border border-stone-200 rounded-xl outline-none focus:border-stone-500"
             />
             <button
